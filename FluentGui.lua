@@ -1042,22 +1042,19 @@ scaleHost.Parent = root
 local windowScale = make("UIScale", { Scale = 0.92 })
 windowScale.Parent = scaleHost
 
--- Soft rounded outer rim
+-- No outer hollow rim — a transparent stroked frame reads as a ghost border.
+-- Window already has its own stroke + metallic rim.
 local glowOuter = make("Frame", {
 	Name = "GlowOuter",
-	Size = UDim2.new(1, 8, 1, 8),
-	Position = UDim2.new(0.5, 0, 0.5, 0),
-	AnchorPoint = Vector2.new(0.5, 0.5),
+	Size = UDim2.new(1, 0, 1, 0),
 	BackgroundTransparency = 1,
 	BorderSizePixel = 0,
+	Visible = false,
 	ZIndex = 0,
-}, {
-	corner(12),
-	stroke(Color3.fromRGB(200, 200, 210), 1, 0.6),
 })
 glowOuter.Parent = scaleHost
 
-local glowMid = glowOuter -- keep refs for destroy/minimize tweens
+local glowMid = glowOuter
 local glowStroke = glowOuter
 
 -- NO black drop shadow. Border stack = depth without muddy slabs.
@@ -5230,7 +5227,7 @@ end
 local function showWindow()
 	root.Visible = true
 	window.Visible = true
-	glowOuter.Visible = true
+	glowOuter.Visible = false -- never show hollow outer stroke
 	if windowRim then windowRim.Visible = true end
 	-- restore remembered geometry — always top-left anchor for correct dragging
 	root.AnchorPoint = Vector2.new(0, 0)
