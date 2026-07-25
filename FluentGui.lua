@@ -1972,66 +1972,40 @@ local function rememberWindowGeometry()
 	task.defer(saveConfigFile)
 end
 
+-- Drag handle: click/drag from the exact point you pressed (keeps grab under cursor)
+local dragHandle = make("TextButton", {
+	Name = "DragHandle",
+	Size = UDim2.new(1, -220, 1, 0),
+	Position = UDim2.fromOffset(0, 0),
+	BackgroundTransparency = 1,
+	Text = "",
+	AutoButtonColor = false,
+	ZIndex = 8,
+})
+dragHandle.Parent = titleBar
+
 do
 	local dragging = false
 	local dragMoved = false
-	local grabOffset = Vector2.zero -- AbsolutePosition - mouse at grab
-	local grabMouse = Vector2.zero
-	local dragConn = nil
+	local startMouse = Vector2.new(0, 0)
+	local startPos = Vector2.new(0, 0)
 
-	local function mousePos()
-		return UserInputService:GetMouseLocation()
-	end
-
-	local function isOverChrome(mx, my)
-		for _, obj in ipairs({ winControls, fpsPill }) do
-			if obj and obj.Parent then
-				local p, s = obj.AbsolutePosition, obj.AbsoluteSize
-				if mx >= p.X and mx <= p.X + s.X and my >= p.Y and my <= p.Y + s.Y then
-					return true
-				end
-			end
-		end
-		local bell = titleBar:FindFirstChild("NotifBell")
-		if bell then
-			local p, s = bell.AbsolutePosition, bell.AbsoluteSize
-			if mx >= p.X and mx <= p.X + s.X and my >= p.Y and my <= p.Y + s.Y then
-				return true
-			end
-		end
-		return false
-	end
-
-	local function applyDrag()
-		if not dragging or not root.Parent then return end
-		local m = mousePos()
-		if (m - grabMouse).Magnitude > 3 then
-			dragMoved = true
-		end
-		local nx = m.X + grabOffset.X
-		local ny = m.Y + grabOffset.Y
-		-- clamp only (no edge-snap while dragging — snap fights the cursor)
-		local vp = getViewport()
-		local w = root.Size.X.Offset
-		local h = root.Size.Y.Offset
-		nx = math.clamp(nx, 0, math.max(0, vp.X - w))
-		ny = math.clamp(ny, 0, math.max(0, vp.Y - h))
-		root.AnchorPoint = Vector2.zero
-		root.Position = UDim2.fromOffset(math.floor(nx + 0.5), math.floor(ny + 0.5))
+	local function ensureTopLeftAnchor()
+		-- Keep Position offsets = on-screen top-left (required for delta drag)
+		local abs = root.AbsolutePosition
+		root.AnchorPoint = Vector2.new(0, 0)
+		root.Position = UDim2.fromOffset(abs.X, abs.Y)
 		targetPos = root.Position
 	end
 
 	local function stopDrag()
 		if not dragging then return end
 		dragging = false
-		if dragConn then
-			dragConn:Disconnect()
-			dragConn = nil
-		end
-		local ap = root.AbsolutePosition
-		local sz = root.AbsoluteSize
-		local x, y = snapPosition(ap.X, ap.Y, sz.X, sz.Y)
-		root.AnchorPoint = Vector2.zero
+		local x = root.Position.X.Offset
+		local y = root.Position.Y.Offset
+		local w = root.Size.X.Offset
+		local h = root.Size.Y.Offset
+		x, y = snapPosition(x, y, w, h)
 		root.Position = UDim2.fromOffset(x, y)
 		targetPos = root.Position
 		if dragMoved then
@@ -2039,13 +2013,11 @@ do
 		end
 	end
 
-	titleBar.InputBegan:Connect(function(input)
+	dragHandle.InputBegan:Connect(function(input)
 		if Flags.LockLayout or Flags.Fullscreen then return end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		local m = mousePos()
-		if isOverChrome(m.X, m.Y) then return end
 
 		local now = os.clock()
 		if now - lastTitleClick < 0.32 then
@@ -2056,30 +2028,34 @@ do
 		end
 		lastTitleClick = now
 
-		-- Convert to top-left anchor WITHOUT jumping: keep visual AbsolutePosition
-		local ap = root.AbsolutePosition
-		root.AnchorPoint = Vector2.zero
-		root.Position = UDim2.fromOffset(ap.X, ap.Y)
-		targetPos = root.Position
-
-		-- Grab offset keeps the title under the cursor (no snap-to-corner)
-		m = mousePos()
-		ap = root.AbsolutePosition
-		grabOffset = Vector2.new(ap.X - m.X, ap.Y - m.Y)
-		grabMouse = m
+		ensureTopLeftAnchor()
+		startMouse = UserInputService:GetMouseLocation()
+		startPos = Vector2.new(root.Position.X.Offset, root.Position.Y.Offset)
 		dragging = true
 		dragMoved = false
 		State.lastInteraction = os.clock()
-
-		if dragConn then dragConn:Disconnect() end
-		dragConn = RunService.Heartbeat:Connect(applyDrag)
-		applyDrag()
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local m = UserInputService:GetMouseLocation()
+			local delta = m - startMouse
+			if delta.Magnitude > 2 then
+				dragMoved = true
+			end
+			local nx = startPos.X + delta.X
+			local ny = startPos.Y + delta.Y
+			local vp = getViewport()
+			local w = root.Size.X.Offset
+			local h = root.Size.Y.Offset
+			nx = math.clamp(nx, 0, math.max(0, vp.X - w))
+			ny = math.clamp(ny, 0, math.max(0, vp.Y - h))
+			-- Pure delta from click — window stays glued to the grab point
+			root.Position = UDim2.fromOffset(nx, ny)
+			targetPos = root.Position
+		elseif resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
 			if Flags.LockLayout then return end
-			local mouse = mousePos()
+			local mouse = UserInputService:GetMouseLocation()
 			local ap, asz = absRootPos()
 			local x, y, w, h = ap.X, ap.Y, asz.X, asz.Y
 			local minW, minH = 420, 280
@@ -2096,7 +2072,7 @@ do
 				h = nh
 			end
 			x, y = snapPosition(x, y, w, h)
-			root.AnchorPoint = Vector2.zero
+			root.AnchorPoint = Vector2.new(0, 0)
 			root.Size = UDim2.fromOffset(w, h)
 			targetPos = UDim2.fromOffset(x, y)
 			root.Position = targetPos
@@ -2115,19 +2091,16 @@ do
 		end
 	end)
 
-	-- Soft follow only when NOT dragging
-	RunService.RenderStepped:Connect(function(dt)
-		if not root.Parent or resizing or dragging then return end
-		local current = root.Position
-		local a = math.clamp(dt * 22, 0, 1)
-		root.Position = UDim2.new(
-			current.X.Scale + (targetPos.X.Scale - current.X.Scale) * a,
-			current.X.Offset + (targetPos.X.Offset - current.X.Offset) * a,
-			current.Y.Scale + (targetPos.Y.Scale - current.Y.Scale) * a,
-			current.Y.Offset + (targetPos.Y.Offset - current.Y.Offset) * a
-		)
+	-- Safety: if button released outside game, still end drag
+	RunService.Heartbeat:Connect(function()
+		if dragging and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+			stopDrag()
+		end
 	end)
 end
+
+-- Keep targetPos in sync (no lerp — lerp caused drag to feel "sticky"/wrong)
+targetPos = root.Position
 
 -- Resize hit pads
 do
@@ -2182,8 +2155,19 @@ pcall(function()
 	end
 	if w and w.pos then
 		root.AnchorPoint = Vector2.new(0, 0)
-		targetPos = UDim2.new(w.pos[1], w.pos[2], w.pos[3], w.pos[4])
-		root.Position = targetPos
+		local sx, ox = tonumber(w.pos[1]) or 0, tonumber(w.pos[2]) or 0
+		local sy, oy = tonumber(w.pos[3]) or 0, tonumber(w.pos[4]) or 0
+		-- Prefer offset-only positions (scale positions break grab-drag)
+		if sx == 0 and sy == 0 then
+			root.Position = UDim2.fromOffset(ox, oy)
+		else
+			local vp = getViewport()
+			root.Position = UDim2.fromOffset(
+				math.floor(vp.X * sx + ox - root.Size.X.Offset * 0.5),
+				math.floor(vp.Y * sy + oy - root.Size.Y.Offset * 0.5)
+			)
+		end
+		targetPos = root.Position
 	end
 	if w and w.preset then State.currentPreset = w.preset end
 end)
@@ -5248,11 +5232,25 @@ local function showWindow()
 	window.Visible = true
 	glowOuter.Visible = true
 	if windowRim then windowRim.Visible = true end
-	-- restore remembered geometry
+	-- restore remembered geometry — always top-left anchor for correct dragging
+	root.AnchorPoint = Vector2.new(0, 0)
 	if State.savedWindowPos then
-		root.Position = State.savedWindowPos
-		targetPos = State.savedWindowPos
+		local sp = State.savedWindowPos
+		-- normalize any old center-anchored saves to offset-only
+		if sp.X.Scale ~= 0 or sp.Y.Scale ~= 0 then
+			local abs = root.AbsolutePosition
+			root.Position = UDim2.fromOffset(abs.X, abs.Y)
+		else
+			root.Position = UDim2.fromOffset(sp.X.Offset, sp.Y.Offset)
+		end
+	else
+		local vp = getViewport()
+		root.Position = UDim2.fromOffset(
+			math.floor((vp.X - (root.Size.X.Offset)) * 0.5),
+			math.floor((vp.Y - (root.Size.Y.Offset)) * 0.5) + 20
+		)
 	end
+	targetPos = root.Position
 	if not minimized then
 		local sw = State.savedWindowSize
 		local okSize = sw and sw.Y.Offset >= 280 and sw.X.Offset >= 420
