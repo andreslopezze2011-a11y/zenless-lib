@@ -2206,7 +2206,8 @@ local onlineDot = make("Frame", {
 onlineDot.Parent = userCard
 softPulse(onlineDot, "BackgroundTransparency", 0, 0.45, 1.4)
 
-make("TextLabel", {
+local displayNameLabel = make("TextLabel", {
+	Name = "DisplayName",
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, -58, 0, 15),
 	Position = UDim2.fromOffset(52, 10),
@@ -2217,9 +2218,11 @@ make("TextLabel", {
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
 	ZIndex = 2,
-}).Parent = userCard
+})
+displayNameLabel.Parent = userCard
 
 local userNameLabel = make("TextLabel", {
+	Name = "UserName",
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, -58, 0, 13),
 	Position = UDim2.fromOffset(52, 26),
@@ -2235,6 +2238,7 @@ userNameLabel.Parent = userCard
 registerAccent(userNameLabel, "TextColor3")
 
 local hintLabel = make("TextLabel", {
+	Name = "HideHint",
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, -58, 0, 12),
 	Position = UDim2.fromOffset(52, 42),
@@ -2247,6 +2251,9 @@ local hintLabel = make("TextLabel", {
 	ZIndex = 2,
 })
 hintLabel.Parent = userCard
+
+-- Clip profile text cleanly when sidebar collapses
+userCard.ClipsDescendants = true
 
 -- Give tab list room for taller profile card
 tabHolder.Size = UDim2.new(1, 0, 1, -78)
@@ -2985,6 +2992,10 @@ local function createTab(nameOrConfig)
 	if Flags.SidebarCollapsed then
 		label.Visible = false
 		subLabel.Visible = false
+		iconBg.AnchorPoint = Vector2.new(0.5, 0.5)
+		iconBg.Position = UDim2.new(0.5, 0, 0.5, 0)
+		iconBg.Size = UDim2.fromOffset(30, 30)
+		btn.Size = UDim2.new(1, 0, 0, 42)
 	end
 
 	local page = make("CanvasGroup", {
@@ -5423,7 +5434,7 @@ local sizePresets = {
 	Wide = { 760, 500 },
 }
 local preFullscreen = nil
-local SIDEBAR_W, SIDEBAR_COLLAPSED_W = 168, 56
+local SIDEBAR_W, SIDEBAR_COLLAPSED_W = 168, 58
 local contentPanelRef = contentPanel
 local sidebarCollapseToken = 0
 
@@ -5518,22 +5529,93 @@ setSidebarCollapsed = function(on)
 				Position = UDim2.fromOffset(pad, 8),
 			})
 		end
-		if navLabel then navLabel.Visible = not on end
+
+		-- Nav chrome
+		if navLabel then
+			navLabel.Visible = not on
+			navLabel.Size = on and UDim2.new(1, 0, 0, 0) or UDim2.new(1, -8, 0, 18)
+		end
+		if tabIndicator then
+			tabIndicator.Visible = not on
+		end
+
+		-- Profile: icon-only when collapsed (no clipped "o..." text)
+		if displayNameLabel then displayNameLabel.Visible = not on end
 		if userNameLabel then userNameLabel.Visible = not on end
 		if hintLabel then hintLabel.Visible = not on end
 		if userCard then
-			tween(userCard, Anim.Fast, {
-				BackgroundTransparency = on and 1 or 0,
-			})
+			userCard.ClipsDescendants = true
+			if on then
+				tween(userCard, Anim.Smooth, {
+					Size = UDim2.new(1, -10, 0, 48),
+					Position = UDim2.new(0, 5, 1, -56),
+					BackgroundTransparency = 0.15,
+				})
+			else
+				tween(userCard, Anim.Smooth, {
+					Size = UDim2.new(1, -16, 0, 62),
+					Position = UDim2.new(0, 8, 1, -70),
+					BackgroundTransparency = 0,
+				})
+			end
 		end
+		if avatarGlow then
+			avatarGlow.Visible = not on
+		end
+		if avatar then
+			if on then
+				avatar.AnchorPoint = Vector2.new(0.5, 0.5)
+				tween(avatar, Anim.Fast, {
+					Position = UDim2.new(0.5, 0, 0.5, 0),
+					Size = UDim2.fromOffset(32, 32),
+				})
+			else
+				avatar.AnchorPoint = Vector2.new(0, 0.5)
+				tween(avatar, Anim.Fast, {
+					Position = UDim2.new(0, 10, 0.5, 0),
+					Size = UDim2.fromOffset(36, 36),
+				})
+			end
+		end
+		if onlineDot then
+			if on then
+				onlineDot.Position = UDim2.new(0.5, 10, 0.5, 10)
+				onlineDot.AnchorPoint = Vector2.new(0.5, 0.5)
+			else
+				onlineDot.AnchorPoint = Vector2.new(0, 0)
+				onlineDot.Position = UDim2.fromOffset(36, 40)
+			end
+		end
+
+		-- Tabs: centered icon rail
+		local pad = tabHolder and tabHolder:FindFirstChildOfClass("UIPadding")
+		if pad then
+			pad.PaddingLeft = UDim.new(0, on and 4 or 8)
+			pad.PaddingRight = UDim.new(0, on and 4 or 8)
+			pad.PaddingTop = UDim.new(0, on and 8 or 10)
+		end
+
 		for _, t in ipairs(tabs) do
 			if t.Label then t.Label.Visible = not on end
 			if t.SubLabel then t.SubLabel.Visible = not on end
-			if t.BadgeLabel then t.BadgeLabel.Visible = (not on) and t.BadgeLabel.Text ~= "" end
-			if t.FavMark then t.FavMark.Visible = (not on) and t.Favorite end
+			if t.BadgeLabel then
+				t.BadgeLabel.Visible = (not on) and t.BadgeLabel.Text ~= "" and t.BadgeLabel.Text ~= nil
+			end
+			-- Never show favorite stars (yellow dots)
+			if t.FavMark then t.FavMark.Visible = false end
+			if t.Button then
+				t.Button.Size = on and UDim2.new(1, 0, 0, 42) or UDim2.new(1, 0, 0, 48)
+			end
 			if t.IconBg then
-				t.IconBg.Position = on and UDim2.new(0.5, 0, 0.5, 0) or UDim2.fromOffset(8, 8)
-				t.IconBg.AnchorPoint = on and Vector2.new(0.5, 0.5) or Vector2.new(0, 0)
+				if on then
+					t.IconBg.AnchorPoint = Vector2.new(0.5, 0.5)
+					t.IconBg.Position = UDim2.new(0.5, 0, 0.5, 0)
+					t.IconBg.Size = UDim2.fromOffset(30, 30)
+				else
+					t.IconBg.AnchorPoint = Vector2.new(0, 0)
+					t.IconBg.Position = UDim2.fromOffset(8, 8)
+					t.IconBg.Size = UDim2.fromOffset(32, 32)
+				end
 			end
 		end
 	end)
@@ -5631,13 +5713,13 @@ end
 local function toggleFavorite(tab)
 	if not tab then return end
 	tab.Favorite = not tab.Favorite
+	-- No FavMark UI — stars were the yellow corner dots
 	pcall(function()
-		if tab.FavMark then
-			tab.FavMark.Visible = tab.Favorite
-		elseif tab.Button then
+		if tab.Button then
 			local star = tab.Button:FindFirstChild("FavMark")
-			if star then star.Visible = tab.Favorite end
+			if star then star:Destroy() end
 		end
+		tab.FavMark = nil
 	end)
 	refreshTabOrder()
 	return tab.Favorite
@@ -5813,21 +5895,11 @@ enhanceTab = function(tab)
 	local btn = tab.Button
 	if not btn then return tab end
 
+	-- Favorite stars removed (looked like yellow dots on tabs)
+	tab.FavMark = nil
 	pcall(function()
-		local fav = make("TextLabel", {
-			Name = "FavMark",
-			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(10, 10),
-			Position = UDim2.new(1, -14, 0, 4),
-			Font = Enum.Font.GothamBold,
-			Text = "*",
-			TextSize = 12,
-			TextColor3 = Theme.Warning,
-			Visible = tab.Favorite and true or false,
-			ZIndex = 5,
-		})
-		fav.Parent = btn
-		tab.FavMark = fav
+		local oldFav = btn:FindFirstChild("FavMark")
+		if oldFav then oldFav:Destroy() end
 	end)
 
 	pcall(function()
