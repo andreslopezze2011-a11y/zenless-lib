@@ -7337,10 +7337,23 @@ local function runKeySystem(opts)
 
 	local finished = false
 	local unlocked = false
+	local CARD_W, CARD_H = 460, 392
+
+	-- Dim backdrop
+	local dim = make("TextButton", {
+		Name = "KeyDim",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 1,
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = 198,
+	})
+	dim.Parent = screenGui
 
 	local host = make("Frame", {
 		Name = "KeySystemHost",
-		Size = UDim2.fromOffset(420, 340),
+		Size = UDim2.fromOffset(CARD_W - 24, CARD_H - 20),
 		Position = UDim2.new(0.5, 0, 0.5, 0),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
@@ -7348,130 +7361,248 @@ local function runKeySystem(opts)
 	})
 	host.Parent = screenGui
 
+	-- Match main window shell (sheen + border + accent stroke)
+	local keyStroke = stroke(Color3.fromRGB(200, 200, 210), 1, 0.15)
+	local keyAccentStroke = stroke(Theme.Accent, 1, 0.55)
+	registerAccent(keyAccentStroke, "Color")
+
 	local card = make("CanvasGroup", {
 		Name = "KeyCard",
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(18, 18, 20),
+		BackgroundColor3 = Theme.Background,
 		BorderSizePixel = 0,
 		GroupTransparency = 1,
 		ZIndex = 201,
 		ClipsDescendants = true,
-	}, {
-		corner(16),
-		stroke(Color3.fromRGB(130, 130, 140), 1, 0.3),
-	})
+	}, { corner(10), keyStroke, keyAccentStroke })
 	card.Parent = host
 
-	make("Frame", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(22, 22, 26),
-		BorderSizePixel = 0,
-		ZIndex = 201,
-	}, {
-		corner(16),
-		make("UIGradient", {
-			Rotation = 135,
-			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(36, 36, 42)),
-				ColorSequenceKeypoint.new(0.55, Color3.fromRGB(18, 18, 22)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 14)),
-			}),
-		}),
-	}).Parent = card
-
-	-- Sharp outline behind card (no soft filled glow)
-	local keyOutline = make("Frame", {
-		Size = UDim2.new(1, 0, 1, 0),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 199,
-		Active = false,
-	}, {
-		corner(16),
-		make("UIStroke", {
-			Color = Color3.fromRGB(210, 210, 220),
-			Thickness = 1,
-			Transparency = 0.25,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	local keySheenGrad = make("UIGradient", {
+		Rotation = 135,
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(52, 52, 58)),
+			ColorSequenceKeypoint.new(0.25, Color3.fromRGB(30, 30, 34)),
+			ColorSequenceKeypoint.new(0.55, Theme.Background),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 12)),
 		}),
 	})
-	keyOutline.Parent = host
+	make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		ZIndex = 201,
+	}, { corner(10), keySheenGrad }).Parent = card
+
+	pcall(function()
+		createGridOverlay(card, 28, 0.945)
+	end)
+
+	make("Frame", {
+		Size = UDim2.new(1, -4, 1, -4),
+		Position = UDim2.fromOffset(2, 2),
+		BackgroundTransparency = 1,
+		ZIndex = 202,
+	}, {
+		corner(9),
+		stroke(Color3.new(1, 1, 1), 1, 0.92),
+	}).Parent = card
+
+	-- Title chrome (matches main title bar)
+	local keyTitleBar = make("Frame", {
+		Name = "KeyTitleBar",
+		Size = UDim2.new(1, 0, 0, 48),
+		BackgroundColor3 = Theme.Layer,
+		BorderSizePixel = 0,
+		ZIndex = 205,
+	}, { corner(10) })
+	keyTitleBar.Parent = card
+	make("Frame", {
+		Size = UDim2.new(1, 0, 0, 12),
+		Position = UDim2.new(0, 0, 1, -12),
+		BackgroundColor3 = Theme.Layer,
+		BorderSizePixel = 0,
+		ZIndex = 205,
+	}).Parent = keyTitleBar
+
+	local topAccent = make("Frame", {
+		Size = UDim2.new(1, -24, 0, 2),
+		Position = UDim2.fromOffset(12, 0),
+		BackgroundColor3 = Theme.Accent,
+		BorderSizePixel = 0,
+		ZIndex = 208,
+		ClipsDescendants = true,
+	}, { corner(1) })
+	topAccent.Parent = card
+	registerAccent(topAccent, "BackgroundColor3")
+	local topShine = make("Frame", {
+		Size = UDim2.new(0.28, 0, 1, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		ZIndex = 209,
+	})
+	topShine.Parent = topAccent
+	make("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, 0.1),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+	}).Parent = topShine
+	task.spawn(function()
+		while topShine.Parent and not finished do
+			topShine.Position = UDim2.new(-0.3, 0, 0, 0)
+			tween(topShine, TweenInfo.new(2.0, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(1.1, 0, 0, 0),
+			})
+			task.wait(3.2)
+		end
+	end)
+
+	local accentDot = make("Frame", {
+		Size = UDim2.fromOffset(8, 8),
+		Position = UDim2.fromOffset(18, 20),
+		BackgroundColor3 = Theme.Accent,
+		ZIndex = 207,
+	}, { corner(4) })
+	accentDot.Parent = keyTitleBar
+	registerAccent(accentDot, "BackgroundColor3")
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -120, 1, 0),
+		Position = UDim2.fromOffset(36, 0),
+		Font = Enum.Font.GothamBold,
+		Text = title,
+		TextSize = 15,
+		TextColor3 = Theme.Text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 207,
+	}).Parent = keyTitleBar
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(40, 48),
+		Position = UDim2.fromOffset(118, 0),
+		Font = Enum.Font.Gotham,
+		Text = "v6",
+		TextSize = 12,
+		TextColor3 = Theme.SubText,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 207,
+	}).Parent = keyTitleBar
 
 	local closeBtn = make("TextButton", {
 		Size = UDim2.fromOffset(28, 28),
-		Position = UDim2.new(1, -38, 0, 12),
-		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.2,
+		Position = UDim2.new(1, -40, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = Color3.fromRGB(230, 60, 55),
+		BackgroundTransparency = 0.15,
 		Text = "",
 		AutoButtonColor = false,
 		ZIndex = 210,
-	}, { corner(8), stroke(Theme.Stroke, 1, 0.45) })
-	closeBtn.Parent = card
-	drawIcon(closeBtn, "close", Theme.SubText, 12)
+	}, { corner(8) })
+	closeBtn.Parent = keyTitleBar
+	drawIcon(closeBtn, "close", Color3.fromRGB(255, 255, 255), 12)
 
+	make("Frame", {
+		Size = UDim2.new(1, -24, 0, 1),
+		Position = UDim2.fromOffset(12, 47),
+		BackgroundColor3 = Theme.Stroke,
+		BackgroundTransparency = 0.35,
+		BorderSizePixel = 0,
+		ZIndex = 206,
+	}).Parent = card
+
+	pcall(function()
+		attachPerimeterLight(card, {
+			CornerRadius = 10,
+			Thickness = 1.5,
+			Period = 2.8,
+			ZIndex = 220,
+		})
+	end)
+
+	-- Body content
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -48, 0, 28),
-		Position = UDim2.fromOffset(24, 22),
+		Size = UDim2.new(1, -48, 0, 22),
+		Position = UDim2.fromOffset(24, 64),
 		Font = Enum.Font.GothamBold,
-		Text = title,
-		TextSize = 20,
+		Text = subtitle,
+		TextSize = 14,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 205,
+		ZIndex = 206,
 	}).Parent = card
+
+	local noteCard = make("Frame", {
+		Size = UDim2.new(1, -48, 0, 52),
+		Position = UDim2.fromOffset(24, 94),
+		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.15,
+		BorderSizePixel = 0,
+		ZIndex = 206,
+	}, { corner(10), stroke(Theme.Stroke, 1, 0.5) })
+	noteCard.Parent = card
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -24, 1, -16),
+		Position = UDim2.fromOffset(12, 8),
+		Font = Enum.Font.Gotham,
+		Text = (note ~= "" and note) or "Enter your license key to unlock this hub.",
+		TextSize = 12,
+		TextColor3 = Theme.SubText,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		ZIndex = 207,
+	}).Parent = noteCard
 
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -48, 0, 20),
-		Position = UDim2.fromOffset(24, 50),
-		Font = Enum.Font.Gotham,
-		Text = subtitle,
-		TextSize = 13,
-		TextColor3 = Theme.SubText,
+		Size = UDim2.new(1, -48, 0, 16),
+		Position = UDim2.fromOffset(24, 158),
+		Font = Enum.Font.GothamMedium,
+		Text = "LICENSE KEY",
+		TextSize = 11,
+		TextColor3 = Color3.fromRGB(140, 140, 150),
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 205,
+		ZIndex = 206,
 	}).Parent = card
 
-	if note ~= "" then
-		make("TextLabel", {
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -48, 0, 36),
-			Position = UDim2.fromOffset(24, 74),
-			Font = Enum.Font.Gotham,
-			Text = note,
-			TextSize = 12,
-			TextColor3 = Color3.fromRGB(150, 150, 160),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextWrapped = true,
-			ZIndex = 205,
-		}).Parent = card
-	end
-
 	local inputWrap = make("Frame", {
-		Size = UDim2.new(1, -48, 0, 42),
-		Position = UDim2.fromOffset(24, 128),
+		Size = UDim2.new(1, -48, 0, 44),
+		Position = UDim2.fromOffset(24, 178),
 		BackgroundColor3 = Theme.Element,
 		BorderSizePixel = 0,
-		ZIndex = 205,
-	}, { corner(10), stroke(Theme.Stroke, 1, 0.4) })
+		ZIndex = 206,
+	}, {
+		corner(10),
+		stroke(Theme.Stroke, 1, 0.35),
+		make("UIGradient", {
+			Rotation = 90,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 42, 48)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 28, 32)),
+			}),
+		}),
+	})
 	inputWrap.Parent = card
+	local inputStroke = inputWrap:FindFirstChildOfClass("UIStroke")
 
 	local box = make("TextBox", {
-		Size = UDim2.new(1, -20, 1, 0),
-		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -24, 1, 0),
+		Position = UDim2.fromOffset(12, 0),
 		BackgroundTransparency = 1,
 		ClearTextOnFocus = false,
 		Font = Enum.Font.GothamMedium,
 		Text = "",
-		PlaceholderText = "XXXX-XXXX-XXXX",
+		PlaceholderText = "Enter key…",
 		PlaceholderColor3 = Color3.fromRGB(90, 90, 100),
 		TextColor3 = Theme.Text,
-		TextSize = 14,
+		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 206,
+		ZIndex = 207,
 	})
 	box.Parent = inputWrap
 	if saved and tostring(saved) ~= "" then
@@ -7480,55 +7611,64 @@ local function runKeySystem(opts)
 
 	local statusLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -48, 0, 18),
-		Position = UDim2.fromOffset(24, 176),
+		Size = UDim2.new(1, -48, 0, 16),
+		Position = UDim2.fromOffset(24, 228),
 		Font = Enum.Font.Gotham,
 		Text = "",
 		TextSize = 12,
 		TextColor3 = Theme.Error,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 205,
+		ZIndex = 206,
 	})
 	statusLbl.Parent = card
 
 	local unlockBtn = make("TextButton", {
-		Size = UDim2.new(1, -48, 0, 40),
-		Position = UDim2.fromOffset(24, 206),
+		Size = UDim2.new(1, -48, 0, 42),
+		Position = UDim2.fromOffset(24, 254),
 		BackgroundColor3 = Theme.Accent,
 		Text = "Unlock",
 		Font = Enum.Font.GothamBold,
 		TextSize = 14,
-		TextColor3 = Color3.fromRGB(18, 18, 22),
+		TextColor3 = Color3.fromRGB(16, 16, 20),
 		AutoButtonColor = false,
-		ZIndex = 206,
-	}, { corner(10) })
+		ZIndex = 207,
+	}, {
+		corner(10),
+		make("UIGradient", {
+			Rotation = 90,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(230, 230, 238)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 170, 180)),
+			}),
+		}),
+	})
 	unlockBtn.Parent = card
 
 	local getKeyBtn = make("TextButton", {
-		Size = UDim2.new(1, -48, 0, 34),
-		Position = UDim2.fromOffset(24, 256),
+		Size = UDim2.new(1, -48, 0, 36),
+		Position = UDim2.fromOffset(24, 304),
 		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.1,
+		BackgroundTransparency = 0.05,
 		Text = keyLink and "Get Key" or "Need a key?",
 		Font = Enum.Font.GothamMedium,
 		TextSize = 13,
 		TextColor3 = Theme.SubText,
 		AutoButtonColor = false,
-		ZIndex = 206,
-		Visible = keyLink ~= nil or note ~= "",
-	}, { corner(10), stroke(Theme.Stroke, 1, 0.45) })
+		ZIndex = 207,
+		Visible = keyLink ~= nil or true,
+	}, { corner(10), stroke(Theme.Stroke, 1, 0.4) })
 	getKeyBtn.Parent = card
 
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -48, 0, 16),
-		Position = UDim2.fromOffset(24, 304),
+		Size = UDim2.new(1, -48, 0, 14),
+		Position = UDim2.fromOffset(24, 348),
 		Font = Enum.Font.Gotham,
-		Text = "ZENLESS  ·  key system",
+		Text = "ZENLESS  ·  secure key gate",
 		TextSize = 11,
-		TextColor3 = Color3.fromRGB(80, 80, 90),
+		TextColor3 = Color3.fromRGB(78, 78, 88),
 		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 205,
+		ZIndex = 206,
 	}).Parent = card
 
 	local function finish(ok, raw)
@@ -7538,11 +7678,12 @@ local function runKeySystem(opts)
 		State.keyGateActive = false
 		pcall(function()
 			tween(card, Anim.Smooth, { GroupTransparency = 1 })
-			if keyOutline then keyOutline.Visible = false end
+			tween(dim, Anim.Smooth, { BackgroundTransparency = 1 })
 		end)
 		task.delay(0.28, function()
 			pcall(function()
 				if host and host.Parent then host:Destroy() end
+				if dim and dim.Parent then dim:Destroy() end
 			end)
 		end)
 		if ok then
@@ -7579,9 +7720,11 @@ local function runKeySystem(opts)
 	local function tryUnlock()
 		local raw = box.Text
 		if isValid(raw) then
-			statusLbl.TextColor3 = Theme.Success or Color3.fromRGB(90, 200, 120)
+			statusLbl.TextColor3 = Theme.Success
 			statusLbl.Text = "Key accepted"
-			tween(inputWrap.UIStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.1 })
+			if inputStroke then
+				tween(inputStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.05 })
+			end
 			tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Color3.fromRGB(160, 220, 170) })
 			task.delay(0.35, function()
 				finish(true, raw)
@@ -7589,7 +7732,9 @@ local function runKeySystem(opts)
 		else
 			statusLbl.TextColor3 = Theme.Error
 			statusLbl.Text = "Invalid key — try again"
-			tween(inputWrap.UIStroke, Anim.Fast, { Color = Theme.Error, Transparency = 0.1 })
+			if inputStroke then
+				tween(inputStroke, Anim.Fast, { Color = Theme.Error, Transparency = 0.1 })
+			end
 			shake()
 			pcall(function()
 				if playUiSound then playUiSound("error") end
@@ -7603,10 +7748,22 @@ local function runKeySystem(opts)
 	end)
 
 	unlockBtn.MouseEnter:Connect(function()
-		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Color3.fromRGB(220, 220, 230) })
+		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Theme.AccentHover })
 	end)
 	unlockBtn.MouseLeave:Connect(function()
 		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Theme.Accent })
+	end)
+	getKeyBtn.MouseEnter:Connect(function()
+		tween(getKeyBtn, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
+	end)
+	getKeyBtn.MouseLeave:Connect(function()
+		tween(getKeyBtn, Anim.Fast, { BackgroundColor3 = Theme.Element })
+	end)
+	closeBtn.MouseEnter:Connect(function()
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0 })
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0.15 })
 	end)
 
 	getKeyBtn.MouseButton1Click:Connect(function()
@@ -7634,12 +7791,13 @@ local function runKeySystem(opts)
 	closeBtn.MouseButton1Click:Connect(function()
 		finish(false)
 	end)
+	dim.MouseButton1Click:Connect(function() end) -- block click-through
 
 	-- Present
 	card.GroupTransparency = 1
-	host.Size = UDim2.fromOffset(400, 320)
+	tween(dim, Anim.Smooth, { BackgroundTransparency = 0.45 })
 	tween(card, Anim.Smooth, { GroupTransparency = 0 })
-	tween(host, Anim.Spring, { Size = UDim2.fromOffset(420, 340) })
+	tween(host, Anim.Spring, { Size = UDim2.fromOffset(CARD_W, CARD_H) })
 	task.defer(function()
 		pcall(function() box:CaptureFocus() end)
 	end)
