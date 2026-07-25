@@ -7337,7 +7337,7 @@ local function runKeySystem(opts)
 
 	local finished = false
 	local unlocked = false
-	local CARD_W, CARD_H = 400, 268
+	local CARD_W, CARD_H = 380, 250
 
 	local dim = make("TextButton", {
 		Name = "KeyDim",
@@ -7352,16 +7352,16 @@ local function runKeySystem(opts)
 
 	local host = make("Frame", {
 		Name = "KeySystemHost",
-		Size = UDim2.fromOffset(CARD_W - 16, CARD_H - 12),
-		Position = UDim2.new(0.5, 0, 0.5, 8),
+		Size = UDim2.fromOffset(CARD_W - 18, CARD_H - 14),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
 		ZIndex = 200,
 	})
 	host.Parent = screenGui
 
-	local keyStroke = stroke(Color3.fromRGB(200, 200, 210), 1, 0.18)
-	local keyAccentStroke = stroke(Theme.Accent, 1, 0.6)
+	local keyStroke = stroke(Color3.fromRGB(210, 210, 220), 1, 0.2)
+	local keyAccentStroke = stroke(Theme.Accent, 1, 0.62)
 	registerAccent(keyAccentStroke, "Color")
 
 	local card = make("CanvasGroup", {
@@ -7372,7 +7372,7 @@ local function runKeySystem(opts)
 		GroupTransparency = 1,
 		ZIndex = 201,
 		ClipsDescendants = true,
-	}, { corner(12), keyStroke, keyAccentStroke })
+	}, { corner(14), keyStroke, keyAccentStroke })
 	card.Parent = host
 
 	make("Frame", {
@@ -7381,30 +7381,28 @@ local function runKeySystem(opts)
 		BorderSizePixel = 0,
 		ZIndex = 201,
 	}, {
-		corner(12),
+		corner(14),
 		make("UIGradient", {
-			Rotation = 145,
+			Rotation = 150,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 40, 46)),
-				ColorSequenceKeypoint.new(0.45, Theme.Background),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 12)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 38, 44)),
+				ColorSequenceKeypoint.new(0.5, Theme.Background),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 9, 11)),
 			}),
 		}),
 	}).Parent = card
 
-	-- Thin top accent rail
 	local topAccent = make("Frame", {
-		Size = UDim2.new(1, -28, 0, 2),
-		Position = UDim2.fromOffset(14, 0),
+		Size = UDim2.new(1, 0, 0, 2),
 		BackgroundColor3 = Theme.Accent,
 		BorderSizePixel = 0,
 		ZIndex = 210,
 		ClipsDescendants = true,
-	}, { corner(1) })
+	})
 	topAccent.Parent = card
 	registerAccent(topAccent, "BackgroundColor3")
 	local topShine = make("Frame", {
-		Size = UDim2.new(0.3, 0, 1, 0),
+		Size = UDim2.new(0.35, 0, 1, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		ZIndex = 211,
@@ -7419,197 +7417,134 @@ local function runKeySystem(opts)
 	}).Parent = topShine
 	task.spawn(function()
 		while topShine.Parent and not finished do
-			topShine.Position = UDim2.new(-0.35, 0, 0, 0)
-			tween(topShine, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				Position = UDim2.new(1.15, 0, 0, 0),
+			topShine.Position = UDim2.new(-0.4, 0, 0, 0)
+			tween(topShine, TweenInfo.new(1.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(1.2, 0, 0, 0),
 			})
-			task.wait(2.8)
+			task.wait(2.6)
 		end
 	end)
 
 	pcall(function()
 		attachPerimeterLight(card, {
-			CornerRadius = 12,
-			Thickness = 1.25,
-			Period = 3.2,
+			CornerRadius = 14,
+			Thickness = 1.2,
+			Period = 3.4,
 			ZIndex = 230,
 		})
 	end)
 
-	-- Compact header row
-	local brandDot = make("Frame", {
-		Size = UDim2.fromOffset(7, 7),
-		Position = UDim2.fromOffset(22, 22),
-		BackgroundColor3 = Theme.Accent,
-		ZIndex = 212,
-	}, { corner(4) })
-	brandDot.Parent = card
-	registerAccent(brandDot, "BackgroundColor3")
-
-	local brandLbl = make("TextLabel", {
+	-- Header: brand only + close (no extra boxes)
+	make("TextLabel", {
 		BackgroundTransparency = 1,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 20),
-		Position = UDim2.fromOffset(36, 16),
+		Size = UDim2.new(1, -56, 0, 18),
+		Position = UDim2.fromOffset(22, 18),
 		Font = Enum.Font.GothamBold,
-		Text = title,
-		TextSize = 14,
-		TextColor3 = Theme.Text,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		ZIndex = 212,
-	})
-	brandLbl.Parent = card
-
-	local verLbl = make("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(28, 20),
-		Position = UDim2.fromOffset(36, 16),
-		Font = Enum.Font.Gotham,
-		Text = "v6",
+		Text = string.upper(tostring(title)) .. "  ·  ACCESS",
 		TextSize = 11,
-		TextColor3 = Theme.SubText,
+		TextColor3 = Color3.fromRGB(160, 160, 170),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 212,
-	})
-	verLbl.Parent = card
-	task.defer(function()
-		pcall(function()
-			verLbl.Position = UDim2.fromOffset(36 + brandLbl.TextBounds.X + 8, 16)
-		end)
-	end)
+	}).Parent = card
 
 	local closeBtn = make("TextButton", {
-		Size = UDim2.fromOffset(26, 26),
-		Position = UDim2.new(1, -36, 0, 12),
-		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.25,
+		Size = UDim2.fromOffset(28, 28),
+		Position = UDim2.new(1, -38, 0, 14),
+		BackgroundTransparency = 1,
 		Text = "",
 		AutoButtonColor = false,
 		ZIndex = 220,
-	}, { corner(7), stroke(Theme.Stroke, 1, 0.5) })
+	})
 	closeBtn.Parent = card
-	local closeIcon = drawIcon(closeBtn, "close", Theme.SubText, 11)
+	local closeIcon = drawIcon(closeBtn, "close", Color3.fromRGB(140, 140, 150), 12)
 
-	-- One composition: headline + line + field + CTA
+	-- Single headline (plain text — never a bordered box)
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -44, 0, 24),
-		Position = UDim2.fromOffset(22, 56),
+		Size = UDim2.new(1, -44, 0, 28),
+		Position = UDim2.fromOffset(22, 48),
 		Font = Enum.Font.GothamBold,
 		Text = subtitle,
-		TextSize = 16,
+		TextSize = 20,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		ZIndex = 212,
 	}).Parent = card
 
-	make("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -44, 0, 18),
-		Position = UDim2.fromOffset(22, 82),
-		Font = Enum.Font.Gotham,
-		Text = (note ~= "" and note) or "Paste your key below to continue.",
-		TextSize = 12,
-		TextColor3 = Theme.SubText,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		ZIndex = 212,
-	}).Parent = card
-
-	local inputWrap = make("Frame", {
-		Size = UDim2.new(1, -44, 0, 46),
-		Position = UDim2.fromOffset(22, 118),
-		BackgroundColor3 = Color3.fromRGB(22, 22, 26),
-		BorderSizePixel = 0,
-		ZIndex = 212,
-	}, {
-		corner(10),
-		stroke(Color3.fromRGB(110, 110, 120), 1, 0.35),
-	})
-	inputWrap.Parent = card
-	local inputStroke = inputWrap:FindFirstChildOfClass("UIStroke")
-
-	-- Left key mark (drawn, not a second field)
-	local keyMark = make("Frame", {
-		Size = UDim2.fromOffset(28, 28),
-		Position = UDim2.fromOffset(10, 9),
-		BackgroundColor3 = Theme.Layer,
-		BorderSizePixel = 0,
-		ZIndex = 213,
-	}, { corner(8) })
-	keyMark.Parent = inputWrap
-	pcall(function()
-		drawIcon(keyMark, "shield", Theme.Accent, 14)
-	end)
-
+	-- ONE input only — TextBox is the field itself (no nested icon boxes)
 	local box = make("TextBox", {
-		Size = UDim2.new(1, -52, 1, 0),
-		Position = UDim2.fromOffset(44, 0),
-		BackgroundTransparency = 1,
+		Name = "KeyInput",
+		Size = UDim2.new(1, -44, 0, 48),
+		Position = UDim2.fromOffset(22, 92),
+		BackgroundColor3 = Color3.fromRGB(20, 20, 24),
+		BorderSizePixel = 0,
 		ClearTextOnFocus = false,
 		Font = Enum.Font.GothamMedium,
 		Text = "",
-		PlaceholderText = "Key",
-		PlaceholderColor3 = Color3.fromRGB(95, 95, 105),
+		PlaceholderText = "Enter key",
+		PlaceholderColor3 = Color3.fromRGB(100, 100, 112),
 		TextColor3 = Theme.Text,
-		TextSize = 15,
-		TextXAlignment = Enum.TextXAlignment.Left,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 214,
+	}, {
+		corner(11),
+		stroke(Color3.fromRGB(120, 120, 132), 1, 0.4),
 	})
-	box.Parent = inputWrap
-	-- Don't prefill old/wrong saved keys into the field visually as "1234" clutter;
-	-- still accept saved on auto-unlock above. Prefill only if non-empty.
-	if saved and tostring(saved) ~= "" then
+	box.Parent = card
+	local inputStroke = box:FindFirstChildOfClass("UIStroke")
+	-- Prefill only a currently-valid saved key (never stale wrong keys)
+	if saved and isValid(saved) then
 		box.Text = tostring(saved)
 	end
 
 	local statusLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -44, 0, 16),
-		Position = UDim2.fromOffset(22, 168),
+		Position = UDim2.fromOffset(22, 146),
 		Font = Enum.Font.Gotham,
-		Text = " ",
-		TextSize = 11,
+		Text = "",
+		TextSize = 12,
 		TextColor3 = Theme.Error,
-		TextXAlignment = Enum.TextXAlignment.Left,
+		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 212,
 	})
 	statusLbl.Parent = card
 
 	local unlockBtn = make("TextButton", {
-		Size = UDim2.new(1, -44, 0, 40),
-		Position = UDim2.fromOffset(22, 190),
+		Size = UDim2.new(1, -44, 0, 42),
+		Position = UDim2.fromOffset(22, 170),
 		BackgroundColor3 = Theme.Accent,
-		Text = "Continue",
+		Text = "Unlock",
 		Font = Enum.Font.GothamBold,
 		TextSize = 14,
 		TextColor3 = Color3.fromRGB(14, 14, 18),
 		AutoButtonColor = false,
 		ZIndex = 214,
 	}, {
-		corner(10),
+		corner(11),
 		make("UIGradient", {
 			Rotation = 90,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(235, 235, 242)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(175, 175, 188)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 240, 246)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(168, 168, 180)),
 			}),
 		}),
 	})
 	unlockBtn.Parent = card
 
 	local getKeyBtn = make("TextButton", {
-		Size = UDim2.new(1, -44, 0, 22),
-		Position = UDim2.fromOffset(22, 236),
+		Size = UDim2.new(1, -44, 0, 20),
+		Position = UDim2.fromOffset(22, 218),
 		BackgroundTransparency = 1,
-		Text = keyLink and "Get a key" or "Need a key?",
-		Font = Enum.Font.GothamMedium,
+		Text = keyLink and "Get a key" or "",
+		Font = Enum.Font.Gotham,
 		TextSize = 12,
-		TextColor3 = Color3.fromRGB(150, 150, 160),
+		TextColor3 = Color3.fromRGB(140, 140, 152),
 		AutoButtonColor = false,
 		ZIndex = 214,
-		Visible = true,
+		Visible = keyLink ~= nil,
 	})
 	getKeyBtn.Parent = card
 
@@ -7665,17 +7600,17 @@ local function runKeySystem(opts)
 			statusLbl.TextColor3 = Theme.Success
 			statusLbl.Text = "Access granted"
 			if inputStroke then
-				tween(inputStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.05 })
+				tween(inputStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0 })
 			end
 			unlockBtn.Text = "Opening…"
-			task.delay(0.28, function()
+			task.delay(0.25, function()
 				finish(true, raw)
 			end)
 		else
 			statusLbl.TextColor3 = Theme.Error
-			statusLbl.Text = "That key isn’t valid"
+			statusLbl.Text = "Invalid key"
 			if inputStroke then
-				tween(inputStroke, Anim.Fast, { Color = Theme.Error, Transparency = 0.05 })
+				tween(inputStroke, Anim.Fast, { Color = Theme.Error, Transparency = 0 })
 			end
 			shake()
 			pcall(function()
@@ -7686,15 +7621,16 @@ local function runKeySystem(opts)
 
 	unlockBtn.MouseButton1Click:Connect(tryUnlock)
 	box.Focused:Connect(function()
+		statusLbl.Text = ""
 		if inputStroke then
-			tween(inputStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.15 })
+			tween(inputStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.12 })
 		end
 	end)
 	box.FocusLost:Connect(function(enter)
 		if enter then
 			tryUnlock()
 		elseif inputStroke and statusLbl.TextColor3 ~= Theme.Error then
-			tween(inputStroke, Anim.Fast, { Color = Color3.fromRGB(110, 110, 120), Transparency = 0.35 })
+			tween(inputStroke, Anim.Fast, { Color = Color3.fromRGB(120, 120, 132), Transparency = 0.4 })
 		end
 	end)
 
@@ -7708,32 +7644,26 @@ local function runKeySystem(opts)
 		tween(getKeyBtn, Anim.Fast, { TextColor3 = Theme.Text })
 	end)
 	getKeyBtn.MouseLeave:Connect(function()
-		tween(getKeyBtn, Anim.Fast, { TextColor3 = Color3.fromRGB(150, 150, 160) })
+		tween(getKeyBtn, Anim.Fast, { TextColor3 = Color3.fromRGB(140, 140, 152) })
 	end)
 	closeBtn.MouseEnter:Connect(function()
-		tween(closeBtn, Anim.Fast, { BackgroundColor3 = Color3.fromRGB(210, 70, 70), BackgroundTransparency = 0 })
-		if closeIcon and closeIcon.SetColor then closeIcon.SetColor(Color3.new(1, 1, 1)) end
+		if closeIcon and closeIcon.SetColor then closeIcon.SetColor(Theme.Error) end
 	end)
 	closeBtn.MouseLeave:Connect(function()
-		tween(closeBtn, Anim.Fast, { BackgroundColor3 = Theme.Element, BackgroundTransparency = 0.25 })
-		if closeIcon and closeIcon.SetColor then closeIcon.SetColor(Theme.SubText) end
+		if closeIcon and closeIcon.SetColor then closeIcon.SetColor(Color3.fromRGB(140, 140, 150)) end
 	end)
 
 	getKeyBtn.MouseButton1Click:Connect(function()
-		if keyLink then
-			local copied = false
-			pcall(function()
-				if typeof(setclipboard) == "function" then
-					setclipboard(tostring(keyLink))
-					copied = true
-				end
-			end)
-			statusLbl.TextColor3 = Theme.SubText
-			statusLbl.Text = copied and "Link copied" or tostring(keyLink)
-		else
-			statusLbl.TextColor3 = Theme.SubText
-			statusLbl.Text = note ~= "" and note or "Ask the owner for a key"
-		end
+		if not keyLink then return end
+		local copied = false
+		pcall(function()
+			if typeof(setclipboard) == "function" then
+				setclipboard(tostring(keyLink))
+				copied = true
+			end
+		end)
+		statusLbl.TextColor3 = Theme.SubText
+		statusLbl.Text = copied and "Link copied" or tostring(keyLink)
 	end)
 
 	closeBtn.MouseButton1Click:Connect(function()
@@ -7742,7 +7672,7 @@ local function runKeySystem(opts)
 	dim.MouseButton1Click:Connect(function() end)
 
 	card.GroupTransparency = 1
-	tween(dim, Anim.Smooth, { BackgroundTransparency = 0.5 })
+	tween(dim, Anim.Smooth, { BackgroundTransparency = 0.55 })
 	tween(card, Anim.Smooth, { GroupTransparency = 0 })
 	tween(host, Anim.Spring, { Size = UDim2.fromOffset(CARD_W, CARD_H) })
 	task.defer(function()
