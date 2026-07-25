@@ -1030,8 +1030,17 @@ local root = make("Frame", {
 })
 root.Parent = screenGui
 
+-- UIScale MUST NOT live on root — it breaks AbsolutePosition/Position drag math.
+local scaleHost = make("Frame", {
+	Name = "ScaleHost",
+	Size = UDim2.new(1, 0, 1, 0),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+})
+scaleHost.Parent = root
+
 local windowScale = make("UIScale", { Scale = 0.92 })
-windowScale.Parent = root
+windowScale.Parent = scaleHost
 
 -- Soft rounded outer rim
 local glowOuter = make("Frame", {
@@ -1046,7 +1055,7 @@ local glowOuter = make("Frame", {
 	corner(12),
 	stroke(Color3.fromRGB(200, 200, 210), 1, 0.6),
 })
-glowOuter.Parent = root
+glowOuter.Parent = scaleHost
 
 local glowMid = glowOuter -- keep refs for destroy/minimize tweens
 local glowStroke = glowOuter
@@ -1065,7 +1074,7 @@ local window = make("CanvasGroup", {
 	Visible = false,
 	ZIndex = 2,
 }, { corner(10), windowStroke, windowAccentStroke })
-window.Parent = root
+window.Parent = scaleHost
 
 -- Rich multi-stop sheen (child frame — safe; gradient parallaxed separately)
 local bgSheenGradient = make("UIGradient", {
@@ -1965,11 +1974,12 @@ end
 
 do
 	local dragging = false
-	local dragStartMouse, startAbs
 	local dragMoved = false
+	local grabOffset = Vector2.zero -- AbsolutePosition - mouse at grab
+	local grabMouse = Vector2.zero
+	local dragConn = nil
 
 	local function mousePos()
-		-- ScreenGui.IgnoreGuiInset = true → use raw mouse location
 		return UserInputService:GetMouseLocation()
 	end
 
@@ -1992,6 +2002,43 @@ do
 		return false
 	end
 
+	local function applyDrag()
+		if not dragging or not root.Parent then return end
+		local m = mousePos()
+		if (m - grabMouse).Magnitude > 3 then
+			dragMoved = true
+		end
+		local nx = m.X + grabOffset.X
+		local ny = m.Y + grabOffset.Y
+		-- clamp only (no edge-snap while dragging — snap fights the cursor)
+		local vp = getViewport()
+		local w = root.Size.X.Offset
+		local h = root.Size.Y.Offset
+		nx = math.clamp(nx, 0, math.max(0, vp.X - w))
+		ny = math.clamp(ny, 0, math.max(0, vp.Y - h))
+		root.AnchorPoint = Vector2.zero
+		root.Position = UDim2.fromOffset(math.floor(nx + 0.5), math.floor(ny + 0.5))
+		targetPos = root.Position
+	end
+
+	local function stopDrag()
+		if not dragging then return end
+		dragging = false
+		if dragConn then
+			dragConn:Disconnect()
+			dragConn = nil
+		end
+		local ap = root.AbsolutePosition
+		local sz = root.AbsoluteSize
+		local x, y = snapPosition(ap.X, ap.Y, sz.X, sz.Y)
+		root.AnchorPoint = Vector2.zero
+		root.Position = UDim2.fromOffset(x, y)
+		targetPos = root.Position
+		if dragMoved then
+			rememberWindowGeometry()
+		end
+	end
+
 	titleBar.InputBegan:Connect(function(input)
 		if Flags.LockLayout or Flags.Fullscreen then return end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -2002,39 +2049,35 @@ do
 
 		local now = os.clock()
 		if now - lastTitleClick < 0.32 then
+			stopDrag()
 			if minimizeWindow then minimizeWindow() end
 			lastTitleClick = 0
-			dragging = false
 			return
 		end
 		lastTitleClick = now
-		dragging = true
-		dragMoved = false
-		dragStartMouse = m
+
+		-- Convert to top-left anchor WITHOUT jumping: keep visual AbsolutePosition
 		local ap = root.AbsolutePosition
-		startAbs = Vector2.new(ap.X, ap.Y)
-		-- lock top-left anchor so AbsolutePosition matches Position offsets
-		root.AnchorPoint = Vector2.new(0, 0)
+		root.AnchorPoint = Vector2.zero
 		root.Position = UDim2.fromOffset(ap.X, ap.Y)
 		targetPos = root.Position
+
+		-- Grab offset keeps the title under the cursor (no snap-to-corner)
+		m = mousePos()
+		ap = root.AbsolutePosition
+		grabOffset = Vector2.new(ap.X - m.X, ap.Y - m.Y)
+		grabMouse = m
+		dragging = true
+		dragMoved = false
 		State.lastInteraction = os.clock()
+
+		if dragConn then dragConn:Disconnect() end
+		dragConn = RunService.Heartbeat:Connect(applyDrag)
+		applyDrag()
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local m = mousePos()
-			local delta = m - dragStartMouse
-			if math.abs(delta.X) + math.abs(delta.Y) > 2 then
-				dragMoved = true
-			end
-			local nx = startAbs.X + delta.X
-			local ny = startAbs.Y + delta.Y
-			local sz = root.AbsoluteSize
-			nx, ny = snapPosition(nx, ny, sz.X, sz.Y)
-			-- apply immediately (no lerp lag — that made drag feel like it "took" the mouse)
-			root.Position = UDim2.fromOffset(nx, ny)
-			targetPos = root.Position
-		elseif resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
+		if resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
 			if Flags.LockLayout then return end
 			local mouse = mousePos()
 			local ap, asz = absRootPos()
@@ -2053,7 +2096,7 @@ do
 				h = nh
 			end
 			x, y = snapPosition(x, y, w, h)
-			root.AnchorPoint = Vector2.new(0, 0)
+			root.AnchorPoint = Vector2.zero
 			root.Size = UDim2.fromOffset(w, h)
 			targetPos = UDim2.fromOffset(x, y)
 			root.Position = targetPos
@@ -2063,17 +2106,7 @@ do
 
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			if dragging then
-				dragging = false
-				local sz = root.AbsoluteSize
-				local x, y = root.Position.X.Offset, root.Position.Y.Offset
-				x, y = snapPosition(x, y, sz.X, sz.Y)
-				root.Position = UDim2.fromOffset(x, y)
-				targetPos = root.Position
-				if dragMoved then
-					rememberWindowGeometry()
-				end
-			end
+			if dragging then stopDrag() end
 			if resizing then
 				resizing = false
 				resizeEdge = nil
@@ -2082,7 +2115,7 @@ do
 		end
 	end)
 
-	-- Soft follow only when NOT dragging (e.g. programmatic targetPos moves)
+	-- Soft follow only when NOT dragging
 	RunService.RenderStepped:Connect(function(dt)
 		if not root.Parent or resizing or dragging then return end
 		local current = root.Position
