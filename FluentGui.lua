@@ -14,20 +14,25 @@
 	v6 highlights: edge snap, tab drag/close/Ctrl+Tab, notif history,
 	config autosave (Flag=), resize, pin, themes, new components.
 
-	Flags (getgenv before load): ZENLESS_DEMO, ZENLESS_NO_LOADER, ZENLESS_DEV
+	Flags (getgenv before load):
+		ZENLESS_DEMO, ZENLESS_NO_LOADER, ZENLESS_DEV, ZENLESS_DEFER_BOOT
 
-	Key system (blocks until unlocked):
-		local ok = Zenless:KeySystem({
-			Title = "ZENLESS",
-			Subtitle = "Enter your key",
-			Note = "Get a key from Discord",
-			Key = "ZENLESS-DEMO",           -- or Keys = { "A", "B" }
-			-- OnlineKey = "https://pastebin.com/raw/xxxx",
-			SaveKey = true,
-			FileName = "zenless_key.txt",
-			KeyLink = "https://discord.gg/yourinvite",
+	Boot order (key → loader → GUI):
+		getgenv().ZENLESS_DEFER_BOOT = true
+		local Zenless = loadstring(readfile("FluentGui.lua"))()
+		local ok = Zenless:Boot({
+			KeySystem = { Title = "ZENLESS", Key = "123456", SaveKey = true },
+			Loader = true, -- play loader AFTER key is granted
 		})
 		if not ok then return end
+		local Window = Zenless:CreateWindow({ Title = "My Hub" })
+
+	Or all-in-one:
+		Zenless:CreateWindow({
+			Title = "My Hub",
+			KeySystem = { Key = "123456" },
+			Loader = true,
+		})
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -7242,6 +7247,8 @@ local function runKeySystem(opts)
 	local keyLink = opts.KeyLink or opts.Discord or opts.Link
 	local onSuccess = opts.Callback or opts.OnSuccess
 	local onFail = opts.OnFail
+	-- SkipShow / ThenLoader: unlock without opening main GUI (Boot plays loader next)
+	local skipShow = opts.SkipShow == true or opts.ThenLoader == true
 
 	local function normalizeKey(s)
 		s = tostring(s or "")
@@ -7334,9 +7341,11 @@ local function runKeySystem(opts)
 		pcall(function()
 			if onSuccess then onSuccess(true, saved) end
 		end)
-		pcall(function()
-			if showWindow then showWindow() end
-		end)
+		if not skipShow then
+			pcall(function()
+				if showWindow then showWindow() end
+			end)
+		end
 		return true
 	end
 
@@ -7582,12 +7591,14 @@ local function runKeySystem(opts)
 			pcall(function()
 				if onSuccess then onSuccess(true, raw) end
 			end)
-			pcall(function()
-				if showWindow then showWindow() end
-			end)
+			if not skipShow then
+				pcall(function()
+					if showWindow then showWindow() end
+				end)
+			end
 			pcall(function()
 				if notify then
-					notify("Unlocked", "Welcome to " .. title, "success", 2.4)
+					notify("Unlocked", skipShow and "Loading…" or ("Welcome to " .. title), "success", 2.2)
 				end
 			end)
 		else
@@ -7799,23 +7810,109 @@ function Zenless:KeySystem(opts)
 	if not ok then
 		State.keyGateActive = false
 		warn("[ZENLESS] KeySystem error: ", result)
-		pcall(function()
-			if showWindow then showWindow() end
-		end)
+		local skip = type(opts) == "table" and (opts.SkipShow or opts.ThenLoader)
+		if not skip then
+			pcall(function()
+				if showWindow then showWindow() end
+			end)
+		end
 		return false
 	end
 	State.keyGateActive = false
 	return result and true or false
 end
 
+--[[
+	Boot sequence: KeySystem (optional) → Loader (optional) → main GUI
+	Use with getgenv().ZENLESS_DEFER_BOOT = true so auto-boot does not race.
+]]
+function Zenless:Boot(opts)
+	opts = type(opts) == "table" and opts or {}
+	State.keyGateActive = false
+
+	-- Keep main shell hidden during the sequence
+	pcall(function()
+		root.Visible = false
+		window.Visible = false
+		if windowRim then windowRim.Visible = false end
+	end)
+
+	local keyOpts = opts.KeySettings or (type(opts.KeySystem) == "table" and opts.KeySystem) or nil
+	if keyOpts then
+		-- Don't open GUI yet — loader runs next
+		keyOpts.SkipShow = true
+		keyOpts.ThenLoader = true
+		local unlocked = Zenless:KeySystem(keyOpts)
+		if not unlocked then
+			pcall(destroyGui)
+			return false
+		end
+		-- brief beat so key card can fade out
+		task.wait(0.2)
+	end
+
+	local wantLoader = opts.Loader
+	if wantLoader == nil then
+		local noLoader = false
+		pcall(function()
+			noLoader = getgenv().ZENLESS_NO_LOADER == true
+		end)
+		wantLoader = not noLoader
+	end
+
+	if wantLoader and playLoader then
+		pcall(function()
+			-- ensure leftover key UI is gone
+			for _, ch in ipairs(screenGui:GetChildren()) do
+				if ch.Name == "KeySystemHost" or ch.Name == "KeyDim" then
+					ch:Destroy()
+				end
+			end
+		end)
+		-- Keep main window hidden while loader runs
+		pcall(function()
+			root.Visible = false
+			window.Visible = false
+		end)
+		pcall(playLoader)
+		pcall(function()
+			if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
+		end)
+	else
+		pcall(function()
+			if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
+			for _, ch in ipairs(screenGui:GetChildren()) do
+				if ch.Name == "LoaderHost" or (ch.Name == "MetallicRim" and ch.Parent == screenGui) then
+					ch:Destroy()
+				end
+			end
+		end)
+	end
+
+	State.keyGateActive = false
+	pcall(showWindow)
+	pcall(function()
+		if root.Size.Y.Offset < 280 or root.Size.X.Offset < 420 then
+			WIN_W, WIN_H = 610, 430
+			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
+		end
+	end)
+	if Flags.AutoCollapseSidebar and setSidebarCollapsed then
+		pcall(setSidebarCollapsed, true)
+	end
+	return true
+end
+
 function Zenless:CreateWindow(config)
 	config = config or {}
-	-- Optional gate: CreateWindow({ KeySystem = { Key = "..." } }) or KeySettings =
 	local keyOpts = config.KeySettings or (type(config.KeySystem) == "table" and config.KeySystem) or nil
-	if keyOpts then
-		local ok = runKeySystem(keyOpts)
+	local wantsBoot = keyOpts ~= nil or config.Loader == true
+	if wantsBoot then
+		local ok = Zenless:Boot({
+			KeySystem = keyOpts,
+			Loader = config.Loader,
+		})
 		if not ok then
-			pcall(destroyGui)
 			return nil
 		end
 	end
@@ -7885,10 +7982,26 @@ end
 
 local showDemo = envFlag("ZENLESS_DEMO")
 local skipLoader = envFlag("ZENLESS_NO_LOADER")
+local deferBoot = envFlag("ZENLESS_DEFER_BOOT") or envFlag("ZENLESS_MANUAL_BOOT")
 -- Legacy: FLUENT_NO_DEMO forced library mode (now default). Ignore unless demo requested.
 
 local function bootLibrary(firstTab)
 	task.defer(function()
+		-- Consumer will call Zenless:Boot({ KeySystem=..., Loader=true }) → key → loader → GUI
+		if deferBoot then
+			pcall(function()
+				root.Visible = false
+				window.Visible = false
+				if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
+				for _, ch in ipairs(screenGui:GetChildren()) do
+					if ch.Name == "LoaderHost" or (ch.Name == "MetallicRim" and ch.Parent == screenGui) then
+						ch:Destroy()
+					end
+				end
+			end)
+			return
+		end
+
 		-- Always clear loader host/rim (fixes ghost glass frame when NO_LOADER)
 		if skipLoader or not playLoader then
 			pcall(function()
