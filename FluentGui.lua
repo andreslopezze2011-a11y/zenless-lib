@@ -1946,11 +1946,15 @@ local function snapPosition(x, y, w, h)
 end
 
 local function rememberWindowGeometry()
+	-- Never persist minimized / broken sizes (this was collapsing the whole UI)
+	local w = root.Size.X.Offset
+	local h = root.Size.Y.Offset
+	if w < 420 or h < 280 then return end
 	State.savedWindowPos = root.Position
-	State.savedWindowSize = root.Size
+	State.savedWindowSize = UDim2.fromOffset(w, h)
 	ConfigData.window = {
 		pos = { root.Position.X.Scale, root.Position.X.Offset, root.Position.Y.Scale, root.Position.Y.Offset },
-		size = { root.Size.X.Offset, root.Size.Y.Offset },
+		size = { w, h },
 		preset = State.currentPreset,
 		anchor = { root.AnchorPoint.X, root.AnchorPoint.Y },
 	}
@@ -2085,12 +2089,19 @@ do
 	end
 end
 
--- Restore saved geometry
+-- Restore saved geometry (reject minimized/corrupt sizes)
 pcall(function()
 	local w = ConfigData.window
-	if w and w.size and w.size[1] then
-		WIN_W, WIN_H = w.size[1], w.size[2]
-		root.Size = UDim2.fromOffset(WIN_W, WIN_H)
+	if w and type(w.size) == "table" then
+		local rw = tonumber(w.size[1])
+		local rh = tonumber(w.size[2])
+		if rw and rh and rw >= 420 and rh >= 280 then
+			WIN_W, WIN_H = math.floor(rw), math.floor(rh)
+			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
+		else
+			-- wipe bad saved size (e.g. height == MINI_H from minimize)
+			ConfigData.window.size = { WIN_W, WIN_H }
+		end
 	end
 	if w and w.pos then
 		root.AnchorPoint = Vector2.new(0, 0)
@@ -2101,14 +2112,14 @@ pcall(function()
 end)
 
 -- ============ BODY ============
-local BODY_H = WIN_H - MINI_H
-
+-- Fill remaining space under title bar (never bake a fixed BODY_H from a bad WIN_H)
 local body = make("Frame", {
 	Name = "Body",
-	Size = UDim2.new(1, 0, 0, BODY_H),
+	Size = UDim2.new(1, 0, 1, -MINI_H),
 	Position = UDim2.fromOffset(0, MINI_H),
 	BackgroundTransparency = 1,
 	ZIndex = 2,
+	ClipsDescendants = true,
 })
 body.Parent = window
 
@@ -2359,14 +2370,14 @@ end
 -- ============ NOTIFICATION SYSTEM (ZENLESS v4) ============
 local notify, dismissNotif, activeNotifs
 (function()
-local NOTIF_W = 340
-local MAX_NOTIFS = 6
+local NOTIF_W = 320
+local MAX_NOTIFS = 5
 local notifCounter = 0
 
 local notifArea = make("Frame", {
 	Name = "NotifArea",
-	Size = UDim2.fromOffset(NOTIF_W, 640),
-	Position = UDim2.new(1, -16, 1, -16),
+	Size = UDim2.fromOffset(NOTIF_W, 520),
+	Position = UDim2.new(1, -14, 1, -14),
 	AnchorPoint = Vector2.new(1, 1),
 	BackgroundTransparency = 1,
 	ZIndex = 90,
@@ -2375,40 +2386,20 @@ local notifArea = make("Frame", {
 notifArea.Parent = screenGui
 
 make("UIListLayout", {
-	Padding = UDim.new(0, 10),
+	Padding = UDim.new(0, 8),
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	VerticalAlignment = Enum.VerticalAlignment.Bottom,
 	HorizontalAlignment = Enum.HorizontalAlignment.Right,
 }).Parent = notifArea
 
 local notifTypes = {
-	info = {
-		icon = "chat",
-		label = "INFO",
-		sub = "System",
-		color = function() return Theme.Accent end,
-	},
-	success = {
-		icon = "plus",
-		label = "SUCCESS",
-		sub = "Complete",
-		color = function() return Theme.Success end,
-	},
-	warning = {
-		icon = "bolt",
-		label = "WARNING",
-		sub = "Caution",
-		color = function() return Theme.Warning end,
-	},
-	error = {
-		icon = "close",
-		label = "ERROR",
-		sub = "Failed",
-		color = function() return Theme.Error end,
-	},
+	info = { icon = "chat", label = "INFO", color = function() return Theme.Accent end },
+	success = { icon = "plus", label = "OK", color = function() return Theme.Success end },
+	warning = { icon = "bolt", label = "WARN", color = function() return Theme.Warning end },
+	error = { icon = "close", label = "ERR", color = function() return Theme.Error end },
 }
 
-activeNotifs = {} -- { wrapper, toast, dismiss, pause, resume }
+activeNotifs = {}
 
 local function countNotifWraps()
 	local list = {}
@@ -2423,17 +2414,12 @@ end
 
 local function estimateBodyHeight(text, maxWidth)
 	if not text or text == "" then return 0 end
-	-- rough wrap estimate (Gotham ~6.4px/char at 12px)
 	local charsPerLine = math.max(18, math.floor(maxWidth / 6.6))
-	local lines = 1
-	local len = #text
-	lines = math.ceil(len / charsPerLine)
-	-- also count explicit newlines
+	local lines = math.ceil(#text / charsPerLine)
 	for _ in string.gmatch(text, "\n") do
 		lines += 1
 	end
-	lines = math.clamp(lines, 1, 4)
-	return lines * 16
+	return math.clamp(lines, 1, 3) * 15
 end
 
 dismissNotif = function(entry)
@@ -2442,23 +2428,19 @@ dismissNotif = function(entry)
 	if not wrapper or not wrapper.Parent or wrapper:GetAttribute("Dismissing") then return end
 	wrapper:SetAttribute("Dismissing", true)
 	entry.alive = false
-
 	if entry.scale then
-		tween(entry.scale, Anim.Fast, { Scale = 0.92 })
+		pcall(function() tween(entry.scale, Anim.Fast, { Scale = 0.94 }) end)
 	end
 	if toast and toast:IsA("CanvasGroup") then
-		tween(toast, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+		tween(toast, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
 			GroupTransparency = 1,
-			Position = UDim2.fromOffset(48, 0),
+			Position = UDim2.fromOffset(36, 0),
 		})
 	end
-	tween(wrapper, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+	tween(wrapper, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
 		Size = UDim2.fromOffset(NOTIF_W, 0),
 	})
-	if entry.shadow then
-		tween(entry.shadow, Anim.Fast, { BackgroundTransparency = 1 })
-	end
-	task.delay(0.34, function()
+	task.delay(0.28, function()
 		if wrapper and wrapper.Parent then wrapper:Destroy() end
 		for i = #activeNotifs, 1, -1 do
 			if activeNotifs[i] == entry then
@@ -2473,7 +2455,7 @@ notify = function(title, body, kind, duration, opts)
 	opts = opts or {}
 	kind = tostring(kind or "info"):lower()
 	if not notifTypes[kind] then kind = "info" end
-	duration = math.clamp(tonumber(duration) or 3.4, 1.0, 30)
+	duration = math.clamp(tonumber(duration) or 3.2, 1.0, 30)
 	title = tostring(title or "Notice")
 	body = tostring(body or "")
 	local info = notifTypes[kind]
@@ -2492,240 +2474,171 @@ notify = function(title, body, kind, duration, opts)
 	end
 
 	local hasBody = body ~= ""
-	local hasAction = opts.Action and opts.Action.Text and opts.Action.Callback
-	local progress = opts.Progress and math.clamp(tonumber(opts.Progress) or 0, 0, 100) or nil
-	local bodyH = hasBody and estimateBodyHeight(body, NOTIF_W - 92) or 0
-	local toastH = 64 + bodyH + (hasBody and 6 or 0) + (hasAction and 30 or 0) + (progress and 10 or 0)
+	local bodyH = hasBody and estimateBodyHeight(body, NOTIF_W - 78) or 0
+	local toastH = math.max(56, 52 + bodyH + (hasBody and 4 or 0))
 
 	local wrapper = make("Frame", {
 		Name = "NotifWrap",
 		Size = UDim2.fromOffset(NOTIF_W, 0),
 		BackgroundTransparency = 1,
-		ClipsDescendants = false,
+		ClipsDescendants = true,
 		LayoutOrder = notifCounter,
 		ZIndex = 90,
 	})
 	wrapper.Parent = notifArea
 
-	-- Soft drop shadow
-	local shadow = make("Frame", {
-		Size = UDim2.new(1, 10, 0, toastH + 10),
-		Position = UDim2.fromOffset(-5, 4),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.72,
-		BorderSizePixel = 0,
-		ZIndex = 90,
-	}, { corner(14) })
-	shadow.Parent = wrapper
-
-	local toastStroke = stroke(Theme.Stroke, 1, 0.28)
+	local toastStroke = stroke(Theme.Stroke, 1, 0.3)
 	local toast = make("CanvasGroup", {
 		Name = "Toast",
 		Size = UDim2.new(1, 0, 0, toastH),
-		Position = UDim2.fromOffset(40, 0),
-		BackgroundColor3 = Color3.fromRGB(16, 16, 18),
+		Position = UDim2.fromOffset(28, 0),
+		BackgroundColor3 = Color3.fromRGB(18, 18, 20),
 		BorderSizePixel = 0,
 		GroupTransparency = 1,
 		ZIndex = 91,
-	}, { corner(12), toastStroke })
+	}, { corner(10), toastStroke })
 	toast.Parent = wrapper
 
-	local uiScale = make("UIScale", { Scale = 0.94 })
+	local uiScale = make("UIScale", { Scale = 0.96 })
 	uiScale.Parent = toast
 
+	-- Surface
 	make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BorderSizePixel = 0,
 		ZIndex = 1,
 	}, {
-		corner(12),
+		corner(10),
 		make("UIGradient", {
-			Rotation = 120,
+			Rotation = 115,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 42, 48)),
-				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(22, 22, 26)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 14)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 40, 46)),
+				ColorSequenceKeypoint.new(0.5, Color3.fromRGB(22, 22, 26)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 14, 16)),
 			}),
 		}),
 	}).Parent = toast
 
+	-- Status rail
 	make("Frame", {
-		Size = UDim2.new(0, 3, 1, -16),
-		Position = UDim2.fromOffset(0, 8),
+		Size = UDim2.new(0, 3, 1, -12),
+		Position = UDim2.fromOffset(0, 6),
 		BackgroundColor3 = color,
 		BorderSizePixel = 0,
-		ZIndex = 4,
-	}, {
-		corner(2),
-		make("UIGradient", {
-			Rotation = 90,
-			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0.55),
-				NumberSequenceKeypoint.new(0.5, 0),
-				NumberSequenceKeypoint.new(1, 0.55),
-			}),
-		}),
-	}).Parent = toast
+		ZIndex = 3,
+	}, { corner(2) }).Parent = toast
 
-	local topLine = make("Frame", {
-		Size = UDim2.new(1, -24, 0, 1),
-		Position = UDim2.fromOffset(12, 0),
-		BackgroundColor3 = color,
-		BackgroundTransparency = 0.35,
-		BorderSizePixel = 0,
-		ZIndex = 5,
-	})
-	topLine.Parent = toast
-	make("UIGradient", {
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0),
-			NumberSequenceKeypoint.new(1, 1),
-		}),
-	}).Parent = topLine
-
+	-- Icon
 	local iconBubble = make("Frame", {
-		Size = UDim2.fromOffset(36, 36),
-		Position = UDim2.fromOffset(14, 14),
+		Size = UDim2.fromOffset(32, 32),
+		Position = UDim2.fromOffset(12, 12),
 		BackgroundColor3 = Color3.fromRGB(28, 28, 32),
 		ZIndex = 5,
-	}, {
-		corner(10),
-		stroke(color, 1.2, 0.35),
-	})
+	}, { corner(8), stroke(color, 1, 0.4) })
 	iconBubble.Parent = toast
 	pcall(function()
-		drawIcon(iconBubble, info.icon, color, 16)
+		drawIcon(iconBubble, info.icon, color, 14)
 	end)
 
-	local pillW = math.clamp(#info.label * 6.5 + 14, 40, 80)
-	local typePill = make("Frame", {
-		Size = UDim2.fromOffset(pillW, 16),
-		Position = UDim2.new(1, -(pillW + 34), 0, 12),
-		BackgroundColor3 = Color3.fromRGB(24, 24, 28),
-		ZIndex = 5,
-	}, { corner(5), stroke(color:Lerp(Theme.Stroke, 0.5), 1, 0.45) })
-	typePill.Parent = toast
+	-- Type
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 1, 0),
+		Size = UDim2.fromOffset(48, 12),
+		Position = UDim2.new(1, -56, 0, 10),
 		Font = Enum.Font.GothamBold,
 		Text = info.label,
 		TextSize = 9,
 		TextColor3 = color,
-		ZIndex = 6,
-	}).Parent = typePill
-
-	local closeBtn = make("TextButton", {
-		Size = UDim2.fromOffset(22, 22),
-		Position = UDim2.new(1, -28, 0, 20),
-		BackgroundColor3 = Color3.fromRGB(34, 34, 40),
-		BackgroundTransparency = 0.25,
-		Text = "",
-		AutoButtonColor = false,
-		ZIndex = 12,
-	}, { corner(6), stroke(Theme.Stroke, 1, 0.5) })
-	closeBtn.Parent = toast
-	pcall(function() drawIcon(closeBtn, "close", Theme.SubText, 10) end)
-
-	make("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(72, 12),
-		Position = UDim2.fromOffset(60, 12),
-		Font = Enum.Font.GothamBold,
-		Text = "ZENLESS",
-		TextSize = 9,
-		TextColor3 = Theme.AccentSoft,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTransparency = 0.1,
+		TextXAlignment = Enum.TextXAlignment.Right,
 		ZIndex = 5,
 	}).Parent = toast
 
+	-- Title
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -108, 0, 18),
-		Position = UDim2.fromOffset(60, 26),
+		Size = UDim2.new(1, -100, 0, 16),
+		Position = UDim2.fromOffset(52, 12),
 		Font = Enum.Font.GothamBold,
 		Text = title,
-		TextSize = 14,
+		TextSize = 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		ZIndex = 5,
 	}).Parent = toast
 
+	-- Body
 	if hasBody then
 		make("TextLabel", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -86, 0, bodyH),
-			Position = UDim2.fromOffset(60, 48),
+			Size = UDim2.new(1, -64, 0, bodyH),
+			Position = UDim2.fromOffset(52, 30),
 			Font = Enum.Font.Gotham,
 			Text = body,
-			TextSize = 12,
+			TextSize = 11,
 			TextColor3 = Theme.SubText,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextYAlignment = Enum.TextYAlignment.Top,
 			TextWrapped = true,
 			ZIndex = 5,
 		}).Parent = toast
+	else
+		make("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -100, 0, 14),
+			Position = UDim2.fromOffset(52, 28),
+			Font = Enum.Font.Gotham,
+			Text = "ZENLESS",
+			TextSize = 10,
+			TextColor3 = Theme.AccentSoft,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 5,
+		}).Parent = toast
 	end
 
-	if progress then
-		local pTrack = make("Frame", {
-			Size = UDim2.new(1, -28, 0, 4),
-			Position = UDim2.fromOffset(14, toastH - (hasAction and 40 or 14)),
-			BackgroundColor3 = Color3.fromRGB(28, 28, 32),
-			BorderSizePixel = 0,
-			ZIndex = 6,
-		}, { corner(2) })
-		pTrack.Parent = toast
-		make("Frame", {
-			Size = UDim2.new(progress / 100, 0, 1, 0),
-			BackgroundColor3 = color,
-			BorderSizePixel = 0,
-			ZIndex = 7,
-		}, { corner(2) }).Parent = pTrack
-	end
+	-- Close
+	local closeBtn = make("TextButton", {
+		Size = UDim2.fromOffset(20, 20),
+		Position = UDim2.new(1, -26, 0, 28),
+		BackgroundColor3 = Color3.fromRGB(34, 34, 40),
+		BackgroundTransparency = 0.3,
+		Text = "x",
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		TextColor3 = Theme.SubText,
+		AutoButtonColor = false,
+		ZIndex = 12,
+	}, { corner(5) })
+	closeBtn.Parent = toast
 
+	-- Timer
 	local barTrack = make("Frame", {
-		Size = UDim2.new(1, -2, 0, 3),
-		Position = UDim2.new(0, 1, 1, -3),
-		BackgroundColor3 = Color3.fromRGB(18, 18, 22),
+		Size = UDim2.new(1, -2, 0, 2),
+		Position = UDim2.new(0, 1, 1, -2),
+		BackgroundColor3 = Color3.fromRGB(20, 20, 24),
 		BorderSizePixel = 0,
 		ZIndex = 7,
 		ClipsDescendants = true,
 	})
 	barTrack.Parent = toast
-
 	local barFill = make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = color,
 		BorderSizePixel = 0,
 		ZIndex = 8,
-	}, {
-		make("UIGradient", {
-			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(245, 245, 250)),
-				ColorSequenceKeypoint.new(0.35, color),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 90, 100)),
-			}),
-		}),
 	})
 	barFill.Parent = barTrack
 
 	local entry = {
 		wrapper = wrapper,
 		toast = toast,
-		shadow = shadow,
 		scale = uiScale,
 		alive = true,
 		paused = false,
 		remaining = duration,
 		duration = duration,
 		bar = barFill,
-		kind = kind,
-		title = title,
 	}
 
 	local barTween
@@ -2749,18 +2662,15 @@ notify = function(title, body, kind, duration, opts)
 		if not entry.alive or entry.paused then return end
 		entry.paused = true
 		timerGen += 1
-		local alpha = barFill.Size.X.Scale
-		entry.remaining = math.max(0.08, duration * math.clamp(alpha, 0, 1))
+		entry.remaining = math.max(0.08, duration * math.clamp(barFill.Size.X.Scale, 0, 1))
 		if barTween then pcall(function() barTween:Cancel() end) end
-		tween(toastStroke, Anim.Fast, { Color = color, Transparency = 0.12 })
-		tween(shadow, Anim.Fast, { BackgroundTransparency = 0.55 })
+		tween(toastStroke, Anim.Fast, { Color = color, Transparency = 0.1 })
 	end
 
 	local function resumeTimer()
 		if not entry.alive or not entry.paused then return end
 		entry.paused = false
-		tween(toastStroke, Anim.Fast, { Color = Theme.Stroke, Transparency = 0.28 })
-		tween(shadow, Anim.Fast, { BackgroundTransparency = 0.72 })
+		tween(toastStroke, Anim.Fast, { Color = Theme.Stroke, Transparency = 0.3 })
 		armTimer(math.clamp(entry.remaining / duration, 0, 1), entry.remaining)
 	end
 
@@ -2770,17 +2680,17 @@ notify = function(title, body, kind, duration, opts)
 	table.insert(activeNotifs, entry)
 
 	closeBtn.MouseEnter:Connect(function()
-		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0, BackgroundColor3 = Theme.Error })
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0, BackgroundColor3 = Theme.Error, TextColor3 = Color3.new(1, 1, 1) })
 	end)
 	closeBtn.MouseLeave:Connect(function()
-		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0.25, BackgroundColor3 = Color3.fromRGB(34, 34, 40) })
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0.3, BackgroundColor3 = Color3.fromRGB(34, 34, 40), TextColor3 = Theme.SubText })
 	end)
 	closeBtn.MouseButton1Click:Connect(function()
 		dismissNotif(entry)
 	end)
 
 	local hoverPad = make("TextButton", {
-		Size = UDim2.new(1, 0, 1, 0),
+		Size = UDim2.new(1, -28, 1, 0),
 		BackgroundTransparency = 1,
 		Text = "",
 		ZIndex = 10,
@@ -2790,10 +2700,10 @@ notify = function(title, body, kind, duration, opts)
 	hoverPad.MouseEnter:Connect(pauseTimer)
 	hoverPad.MouseLeave:Connect(resumeTimer)
 
-	if hasAction then
+	if opts.Action and opts.Action.Text and opts.Action.Callback then
 		local act = make("TextButton", {
-			Size = UDim2.fromOffset(78, 24),
-			Position = UDim2.new(1, -92, 1, -34),
+			Size = UDim2.fromOffset(70, 22),
+			Position = UDim2.new(1, -84, 1, -30),
 			BackgroundColor3 = Theme.Element,
 			Text = opts.Action.Text,
 			Font = Enum.Font.GothamMedium,
@@ -2801,32 +2711,19 @@ notify = function(title, body, kind, duration, opts)
 			TextColor3 = Theme.Text,
 			AutoButtonColor = false,
 			ZIndex = 12,
-		}, { corner(7), stroke(color, 1, 0.4) })
+		}, { corner(6), stroke(color, 1, 0.45) })
 		act.Parent = toast
-		act.MouseEnter:Connect(function()
-			tween(act, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
-		end)
-		act.MouseLeave:Connect(function()
-			tween(act, Anim.Fast, { BackgroundColor3 = Theme.Element })
-		end)
+		toastH += 26
+		toast.Size = UDim2.new(1, 0, 0, toastH)
 		act.MouseButton1Click:Connect(function()
 			task.spawn(opts.Action.Callback)
 			dismissNotif(entry)
 		end)
 	end
 
-	tween(wrapper, Anim.Spring, { Size = UDim2.fromOffset(NOTIF_W, toastH + 6) })
-	tween(toast, Anim.Smooth, {
-		GroupTransparency = 0,
-		Position = UDim2.fromOffset(0, 0),
-	})
+	tween(wrapper, Anim.Spring, { Size = UDim2.fromOffset(NOTIF_W, toastH + 2) })
+	tween(toast, Anim.Smooth, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
 	tween(uiScale, Anim.Spring, { Scale = 1 })
-	task.defer(function()
-		local s = make("UIScale", { Scale = 0.75 })
-		s.Parent = iconBubble
-		tween(s, Anim.Spring, { Scale = 1 })
-	end)
-
 	armTimer(1, duration)
 	return entry
 end
@@ -5279,12 +5176,22 @@ local function showWindow()
 		root.Position = State.savedWindowPos
 		targetPos = State.savedWindowPos
 	end
-	if State.savedWindowSize and not minimized then
-		root.Size = State.savedWindowSize
+	if not minimized then
+		local sw = State.savedWindowSize
+		local okSize = sw and sw.Y.Offset >= 280 and sw.X.Offset >= 420
+		if okSize then
+			root.Size = sw
+			WIN_W, WIN_H = sw.X.Offset, sw.Y.Offset
+		else
+			if WIN_H < 280 or WIN_W < 420 then
+				WIN_W, WIN_H = 610, 430
+			end
+			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
+		end
 	end
 	window.GroupTransparency = 1
 	tween(window, Anim.Smooth, { GroupTransparency = State.windowOpacity or 0 })
-	tween(windowScale, Anim.Spring, { Scale = 1 })
+	tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
 	tween(windowAccentStroke, Anim.Smooth, { Transparency = 0.55 })
 	playUiSound("open")
 	if not hasCelebrated then
@@ -7350,6 +7257,13 @@ local function bootLibrary(firstTab)
 			end)
 		end
 		showWindow()
+		-- hard-reset if a bad size somehow stuck
+		pcall(function()
+			if root.Size.Y.Offset < 280 or root.Size.X.Offset < 420 then
+				WIN_W, WIN_H = 610, 430
+				root.Size = UDim2.fromOffset(WIN_W, WIN_H)
+			end
+		end)
 		if Flags.AutoCollapseSidebar and setSidebarCollapsed then
 			pcall(setSidebarCollapsed, true)
 		end
