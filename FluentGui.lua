@@ -5202,7 +5202,16 @@ bindTabAPI = function(tab)
 		return V5.createInfoGrid(self, items)
 	end
 	function tab:AddActionRow(actions)
-		return V5.createActionRow(self, actions)
+		-- Accept both { text, callback, primary } and { Title, Callback, Primary }
+		local normalized = {}
+		for i, a in ipairs(actions or {}) do
+			normalized[i] = {
+				text = a.text or a.Title or a.Label or ("Action " .. i),
+				callback = a.callback or a.Callback,
+				primary = a.primary or a.Primary,
+			}
+		end
+		return V5.createActionRow(self, normalized)
 	end
 	function tab:AddMetricPanel(opts)
 		opts = opts or {}
