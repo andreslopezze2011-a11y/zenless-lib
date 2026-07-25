@@ -101,6 +101,7 @@ local Flags = {
 	LockLayout = false,
 	EdgeSnap = true,
 	SidebarCollapsed = false,
+	AutoCollapseSidebar = true,
 	Fullscreen = false,
 	SideBySide = false,
 	RainbowBorder = false,
@@ -1184,16 +1185,18 @@ local windowRim = attachPerimeterLight(window, {
 
 -- ============ LOADER (10s download) ============
 local playLoader
+local loaderHost -- outer so skip/destroy can clear the ghost rim
 (function()
 local LOADER_SECONDS = 10
 local loaderFinished = false
 
-local loaderHost = make("Frame", {
+loaderHost = make("Frame", {
 	Name = "LoaderHost",
 	Size = UDim2.fromOffset(420, 360),
 	Position = UDim2.new(0.5, 0, 0.5, 0),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	BackgroundTransparency = 1,
+	Visible = false, -- never show empty host / rim until playLoader
 	ZIndex = 20,
 })
 loaderHost.Parent = screenGui
@@ -1251,7 +1254,8 @@ local loaderSpot = make("Frame", {
 }, { corner(80) })
 loaderSpot.Parent = loaderCard
 
-attachPerimeterLight(loaderHost, {
+-- Rim must live on the card (destroyed with host). Never leave a bare rim on-screen.
+attachPerimeterLight(loaderCard, {
 	CornerRadius = 16,
 	Thickness = 1.5,
 	Period = 2.4,
@@ -1599,6 +1603,7 @@ end
 
 playLoader = function()
 	root.Visible = false
+	if not loaderHost or not loaderHost.Parent then return end
 	loaderHost.Visible = true
 	loaderCard.GroupTransparency = 1
 	local loaderScale = make("UIScale", { Scale = 0.88 })
@@ -1733,7 +1738,7 @@ make("TextLabel", {
 	Size = UDim2.fromOffset(48, MINI_H),
 	Position = UDim2.fromOffset(118, 0),
 	Font = Enum.Font.Gotham,
-	Text = "v5",
+	Text = "v6",
 	TextSize = 12,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
@@ -2109,7 +2114,7 @@ body.Parent = window
 
 local sidebar = make("Frame", {
 	Name = "Sidebar",
-	Size = UDim2.new(0, 152, 1, -12),
+	Size = UDim2.new(0, 168, 1, -12),
 	Position = UDim2.fromOffset(8, 8),
 	BackgroundColor3 = Theme.Sidebar,
 	BorderSizePixel = 0,
@@ -2123,28 +2128,29 @@ local tabHolder = make("Frame", {
 tabHolder.Parent = sidebar
 
 make("UIListLayout", {
-	Padding = UDim.new(0, 4),
+	Padding = UDim.new(0, 6),
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	HorizontalAlignment = Enum.HorizontalAlignment.Center,
 }).Parent = tabHolder
 
 make("UIPadding", {
-	PaddingTop = UDim.new(0, 8),
-	PaddingLeft = UDim.new(0, 6),
-	PaddingRight = UDim.new(0, 6),
+	PaddingTop = UDim.new(0, 10),
+	PaddingLeft = UDim.new(0, 8),
+	PaddingRight = UDim.new(0, 8),
 }).Parent = tabHolder
 
 -- NAV label above tabs
-make("TextLabel", {
-	Size = UDim2.new(1, -12, 0, 16),
+local navLabel = make("TextLabel", {
+	Size = UDim2.new(1, -8, 0, 18),
 	BackgroundTransparency = 1,
 	Font = Enum.Font.GothamBold,
-	Text = "  NAVIGATION",
+	Text = "NAVIGATION",
 	TextSize = 9,
 	TextColor3 = Color3.fromRGB(110, 110, 118),
 	TextXAlignment = Enum.TextXAlignment.Left,
 	LayoutOrder = 0,
-}).Parent = tabHolder
+})
+navLabel.Parent = tabHolder
 
 local tabIndicator = make("Frame", {
 	Size = UDim2.fromOffset(3, 22),
@@ -2343,7 +2349,7 @@ do
 	end
 end
 
--- ============ NOTIFICATION SYSTEM (ZENLESS v2) ============
+-- ============ NOTIFICATION SYSTEM (ZENLESS v4) ============
 local notify, dismissNotif, activeNotifs
 (function()
 local NOTIF_W = 340
@@ -2362,7 +2368,7 @@ local notifArea = make("Frame", {
 notifArea.Parent = screenGui
 
 make("UIListLayout", {
-	Padding = UDim.new(0, 12),
+	Padding = UDim.new(0, 10),
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	VerticalAlignment = Enum.VerticalAlignment.Bottom,
 	HorizontalAlignment = Enum.HorizontalAlignment.Right,
@@ -2370,25 +2376,25 @@ make("UIListLayout", {
 
 local notifTypes = {
 	info = {
-		icon = "i",
+		icon = "chat",
 		label = "INFO",
 		sub = "System",
 		color = function() return Theme.Accent end,
 	},
 	success = {
-		icon = "+",
+		icon = "plus",
 		label = "SUCCESS",
 		sub = "Complete",
 		color = function() return Theme.Success end,
 	},
 	warning = {
-		icon = "!",
+		icon = "bolt",
 		label = "WARNING",
 		sub = "Caution",
 		color = function() return Theme.Warning end,
 	},
 	error = {
-		icon = "X",
+		icon = "close",
 		label = "ERROR",
 		sub = "Failed",
 		color = function() return Theme.Error end,
@@ -2442,6 +2448,9 @@ dismissNotif = function(entry)
 	tween(wrapper, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
 		Size = UDim2.fromOffset(NOTIF_W, 0),
 	})
+	if entry.shadow then
+		tween(entry.shadow, Anim.Fast, { BackgroundTransparency = 1 })
+	end
 	task.delay(0.34, function()
 		if wrapper and wrapper.Parent then wrapper:Destroy() end
 		for i = #activeNotifs, 1, -1 do
@@ -2464,7 +2473,6 @@ notify = function(title, body, kind, duration, opts)
 	local color = info.color()
 	notifCounter += 1
 
-	-- Cap stack
 	local wraps = countNotifWraps()
 	while #wraps >= MAX_NOTIFS do
 		local oldest = table.remove(wraps, 1)
@@ -2477,47 +2485,47 @@ notify = function(title, body, kind, duration, opts)
 	end
 
 	local hasBody = body ~= ""
-	local bodyH = hasBody and estimateBodyHeight(body, NOTIF_W - 88) or 0
-	local toastH = 58 + bodyH + (hasBody and 8 or 0) + 14 -- header + body + timer pad
+	local hasAction = opts.Action and opts.Action.Text and opts.Action.Callback
+	local progress = opts.Progress and math.clamp(tonumber(opts.Progress) or 0, 0, 100) or nil
+	local bodyH = hasBody and estimateBodyHeight(body, NOTIF_W - 92) or 0
+	local toastH = 64 + bodyH + (hasBody and 6 or 0) + (hasAction and 30 or 0) + (progress and 10 or 0)
 
 	local wrapper = make("Frame", {
 		Name = "NotifWrap",
 		Size = UDim2.fromOffset(NOTIF_W, 0),
 		BackgroundTransparency = 1,
-		ClipsDescendants = true,
+		ClipsDescendants = false,
 		LayoutOrder = notifCounter,
 		ZIndex = 90,
 	})
 	wrapper.Parent = notifArea
 
-	local toastStroke = stroke(Theme.Stroke, 1, 0.2)
-	local toastAccent = stroke(Theme.Accent, 1.5, 0.52)
-	registerAccent(toastAccent, "Color")
+	-- Soft drop shadow
+	local shadow = make("Frame", {
+		Size = UDim2.new(1, 10, 0, toastH + 10),
+		Position = UDim2.fromOffset(-5, 4),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.72,
+		BorderSizePixel = 0,
+		ZIndex = 90,
+	}, { corner(14) })
+	shadow.Parent = wrapper
 
+	local toastStroke = stroke(Theme.Stroke, 1, 0.28)
 	local toast = make("CanvasGroup", {
 		Name = "Toast",
 		Size = UDim2.new(1, 0, 0, toastH),
-		Position = UDim2.fromOffset(56, 0),
-		BackgroundColor3 = Theme.Background,
+		Position = UDim2.fromOffset(40, 0),
+		BackgroundColor3 = Color3.fromRGB(16, 16, 18),
 		BorderSizePixel = 0,
 		GroupTransparency = 1,
 		ZIndex = 91,
-	}, { corner(12), toastStroke, toastAccent })
+	}, { corner(12), toastStroke })
 	toast.Parent = wrapper
 
-	local uiScale = make("UIScale", { Scale = 0.9 })
+	local uiScale = make("UIScale", { Scale = 0.94 })
 	uiScale.Parent = toast
 
-	-- Depth plate (subtle lift behind)
-	make("Frame", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(8, 8, 10),
-		BackgroundTransparency = 0.35,
-		BorderSizePixel = 0,
-		ZIndex = 0,
-	}, { corner(12) }).Parent = toast
-
-	-- Panel sheen (same language as main window)
 	make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
@@ -2526,157 +2534,72 @@ notify = function(title, body, kind, duration, opts)
 	}, {
 		corner(12),
 		make("UIGradient", {
-			Rotation = 128,
+			Rotation = 120,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(56, 56, 64)),
-				ColorSequenceKeypoint.new(0.22, Color3.fromRGB(32, 32, 36)),
-				ColorSequenceKeypoint.new(0.55, Theme.Background),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 12)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 42, 48)),
+				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(22, 22, 26)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 14)),
 			}),
 		}),
 	}).Parent = toast
 
-	-- Fine grid (very subtle)
-	local grid = make("Frame", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundTransparency = 1,
-		ZIndex = 1,
-		ClipsDescendants = true,
-	}, { corner(12) })
-	grid.Parent = toast
-	for i = 1, 6 do
-		make("Frame", {
-			Size = UDim2.new(0, 1, 1, 0),
-			Position = UDim2.new(i / 7, 0, 0, 0),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			BackgroundTransparency = 0.965,
-			BorderSizePixel = 0,
-			ZIndex = 1,
-		}).Parent = grid
-	end
-
-	-- Inner hairline
 	make("Frame", {
-		Size = UDim2.new(1, -4, 1, -4),
-		Position = UDim2.fromOffset(2, 2),
-		BackgroundTransparency = 1,
-		ZIndex = 2,
-	}, {
-		corner(11),
-		stroke(Color3.new(1, 1, 1), 1, 0.93),
-	}).Parent = toast
-
-	-- Status rail (thin, no glow wash)
-	make("Frame", {
-		Size = UDim2.new(0, 2, 1, -24),
-		Position = UDim2.fromOffset(0, 12),
+		Size = UDim2.new(0, 3, 1, -16),
+		Position = UDim2.fromOffset(0, 8),
 		BackgroundColor3 = color,
 		BorderSizePixel = 0,
-		ZIndex = 3,
+		ZIndex = 4,
 	}, {
-		corner(1),
+		corner(2),
 		make("UIGradient", {
 			Rotation = 90,
 			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0.65),
+				NumberSequenceKeypoint.new(0, 0.55),
 				NumberSequenceKeypoint.new(0.5, 0),
-				NumberSequenceKeypoint.new(1, 0.65),
+				NumberSequenceKeypoint.new(1, 0.55),
 			}),
 		}),
 	}).Parent = toast
 
-	-- Top chrome bar + sheen sweep
-	local topBar = make("Frame", {
-		Size = UDim2.new(1, -24, 0, 2),
+	local topLine = make("Frame", {
+		Size = UDim2.new(1, -24, 0, 1),
 		Position = UDim2.fromOffset(12, 0),
-		BackgroundColor3 = Theme.Accent,
+		BackgroundColor3 = color,
+		BackgroundTransparency = 0.35,
 		BorderSizePixel = 0,
-		ZIndex = 8,
+		ZIndex = 5,
 	})
-	topBar.Parent = toast
-	registerAccent(topBar, "BackgroundColor3")
-	make("UIGradient", {
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.9),
-			NumberSequenceKeypoint.new(0.5, 0.1),
-			NumberSequenceKeypoint.new(1, 0.9),
-		}),
-	}).Parent = topBar
-
-	local topShine = make("Frame", {
-		Size = UDim2.fromOffset(56, 2),
-		Position = UDim2.fromOffset(-60, 0),
-		BackgroundColor3 = Color3.new(1, 1, 1),
-		BackgroundTransparency = 0.15,
-		BorderSizePixel = 0,
-		ZIndex = 9,
-	})
-	topShine.Parent = topBar
+	topLine.Parent = toast
 	make("UIGradient", {
 		Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 1),
 			NumberSequenceKeypoint.new(0.5, 0),
 			NumberSequenceKeypoint.new(1, 1),
 		}),
-	}).Parent = topShine
+	}).Parent = topLine
 
-	-- Brand row
-	make("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(70, 12),
-		Position = UDim2.fromOffset(54, 8),
-		Font = Enum.Font.GothamBold,
-		Text = "ZENLESS",
-		TextSize = 9,
-		TextColor3 = Theme.AccentSoft,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTransparency = 0.15,
-		ZIndex = 5,
-	}).Parent = toast
-
-	-- Icon chip
 	local iconBubble = make("Frame", {
-		Size = UDim2.fromOffset(34, 34),
-		Position = UDim2.fromOffset(12, 18),
-		BackgroundColor3 = Color3.fromRGB(26, 26, 30),
+		Size = UDim2.fromOffset(36, 36),
+		Position = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = Color3.fromRGB(28, 28, 32),
 		ZIndex = 5,
 	}, {
 		corner(10),
-		stroke(color, 1.25, 0.28),
-		make("UIGradient", {
-			Rotation = 140,
-			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 50, 56)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 16, 20)),
-			}),
-		}),
+		stroke(color, 1.2, 0.35),
 	})
 	iconBubble.Parent = toast
+	pcall(function()
+		drawIcon(iconBubble, info.icon, color, 16)
+	end)
 
-	local iconGlyph = make("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 1, 0),
-		Font = Enum.Font.GothamBold,
-		Text = info.icon,
-		TextSize = 16,
-		TextColor3 = color,
-		ZIndex = 6,
-	})
-	iconGlyph.Parent = iconBubble
-
-	-- Type pill
-	local pillW = (#info.label * 7) + 14
+	local pillW = math.clamp(#info.label * 6.5 + 14, 40, 80)
 	local typePill = make("Frame", {
 		Size = UDim2.fromOffset(pillW, 16),
-		Position = UDim2.new(1, -(pillW + 36), 0, 8),
-		BackgroundColor3 = Color3.fromRGB(22, 22, 26),
+		Position = UDim2.new(1, -(pillW + 34), 0, 12),
+		BackgroundColor3 = Color3.fromRGB(24, 24, 28),
 		ZIndex = 5,
-	}, {
-		corner(5),
-		stroke(color:Lerp(Theme.Stroke, 0.55), 1, 0.4),
-	})
+	}, { corner(5), stroke(color:Lerp(Theme.Stroke, 0.5), 1, 0.45) })
 	typePill.Parent = toast
-
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
@@ -2687,26 +2610,35 @@ notify = function(title, body, kind, duration, opts)
 		ZIndex = 6,
 	}).Parent = typePill
 
-	-- Close button
 	local closeBtn = make("TextButton", {
 		Size = UDim2.fromOffset(22, 22),
 		Position = UDim2.new(1, -28, 0, 20),
 		BackgroundColor3 = Color3.fromRGB(34, 34, 40),
-		BackgroundTransparency = 0.35,
-		Text = "X",
-		Font = Enum.Font.GothamBold,
-		TextSize = 11,
-		TextColor3 = Theme.SubText,
+		BackgroundTransparency = 0.25,
+		Text = "",
 		AutoButtonColor = false,
 		ZIndex = 12,
 	}, { corner(6), stroke(Theme.Stroke, 1, 0.5) })
 	closeBtn.Parent = toast
+	pcall(function() drawIcon(closeBtn, "close", Theme.SubText, 10) end)
 
-	-- Title
-	local titleLbl = make("TextLabel", {
+	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -100, 0, 18),
-		Position = UDim2.fromOffset(54, 22),
+		Size = UDim2.fromOffset(72, 12),
+		Position = UDim2.fromOffset(60, 12),
+		Font = Enum.Font.GothamBold,
+		Text = "ZENLESS",
+		TextSize = 9,
+		TextColor3 = Theme.AccentSoft,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTransparency = 0.1,
+		ZIndex = 5,
+	}).Parent = toast
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -108, 0, 18),
+		Position = UDim2.fromOffset(60, 26),
 		Font = Enum.Font.GothamBold,
 		Text = title,
 		TextSize = 14,
@@ -2714,16 +2646,13 @@ notify = function(title, body, kind, duration, opts)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		ZIndex = 5,
-	})
-	titleLbl.Parent = toast
+	}).Parent = toast
 
-	-- Body (wrapped)
-	local bodyLbl
 	if hasBody then
-		bodyLbl = make("TextLabel", {
+		make("TextLabel", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -78, 0, bodyH),
-			Position = UDim2.fromOffset(54, 42),
+			Size = UDim2.new(1, -86, 0, bodyH),
+			Position = UDim2.fromOffset(60, 48),
 			Font = Enum.Font.Gotham,
 			Text = body,
 			TextSize = 12,
@@ -2732,11 +2661,26 @@ notify = function(title, body, kind, duration, opts)
 			TextYAlignment = Enum.TextYAlignment.Top,
 			TextWrapped = true,
 			ZIndex = 5,
-		})
-		bodyLbl.Parent = toast
+		}).Parent = toast
 	end
 
-	-- Timer track (full-bleed bottom chrome)
+	if progress then
+		local pTrack = make("Frame", {
+			Size = UDim2.new(1, -28, 0, 4),
+			Position = UDim2.fromOffset(14, toastH - (hasAction and 40 or 14)),
+			BackgroundColor3 = Color3.fromRGB(28, 28, 32),
+			BorderSizePixel = 0,
+			ZIndex = 6,
+		}, { corner(2) })
+		pTrack.Parent = toast
+		make("Frame", {
+			Size = UDim2.new(progress / 100, 0, 1, 0),
+			BackgroundColor3 = color,
+			BorderSizePixel = 0,
+			ZIndex = 7,
+		}, { corner(2) }).Parent = pTrack
+	end
+
 	local barTrack = make("Frame", {
 		Size = UDim2.new(1, -2, 0, 3),
 		Position = UDim2.new(0, 1, 1, -3),
@@ -2744,57 +2688,37 @@ notify = function(title, body, kind, duration, opts)
 		BorderSizePixel = 0,
 		ZIndex = 7,
 		ClipsDescendants = true,
-	}, {
-		corner(0),
 	})
 	barTrack.Parent = toast
 
 	local barFill = make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Theme.Accent,
+		BackgroundColor3 = color,
 		BorderSizePixel = 0,
 		ZIndex = 8,
 	}, {
 		make("UIGradient", {
-			Rotation = 0,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 240, 245)),
-				ColorSequenceKeypoint.new(0.4, color:Lerp(Theme.Accent, 0.35)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(110, 110, 120)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(245, 245, 250)),
+				ColorSequenceKeypoint.new(0.35, color),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 90, 100)),
 			}),
 		}),
 	})
 	barFill.Parent = barTrack
 
-	-- Leading glint on timer
-	local barGlint = make("Frame", {
-		Size = UDim2.fromOffset(18, 3),
-		Position = UDim2.new(1, -18, 0, 0),
-		AnchorPoint = Vector2.new(0, 0),
-		BackgroundColor3 = Color3.new(1, 1, 1),
-		BackgroundTransparency = 0.35,
-		BorderSizePixel = 0,
-		ZIndex = 9,
-	})
-	barGlint.Parent = barFill
-	make("UIGradient", {
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0.2),
-			NumberSequenceKeypoint.new(1, 1),
-		}),
-	}).Parent = barGlint
-
-	-- Timer state (pause on hover)
 	local entry = {
 		wrapper = wrapper,
 		toast = toast,
+		shadow = shadow,
 		scale = uiScale,
 		alive = true,
 		paused = false,
 		remaining = duration,
 		duration = duration,
 		bar = barFill,
+		kind = kind,
+		title = title,
 	}
 
 	local barTween
@@ -2817,22 +2741,20 @@ notify = function(title, body, kind, duration, opts)
 	local function pauseTimer()
 		if not entry.alive or entry.paused then return end
 		entry.paused = true
-		timerGen += 1 -- invalidate pending dismiss
+		timerGen += 1
 		local alpha = barFill.Size.X.Scale
 		entry.remaining = math.max(0.08, duration * math.clamp(alpha, 0, 1))
 		if barTween then pcall(function() barTween:Cancel() end) end
-		tween(toastAccent, Anim.Fast, { Transparency = 0.35 })
-		tween(toastStroke, Anim.Fast, { Color = Theme.Accent })
+		tween(toastStroke, Anim.Fast, { Color = color, Transparency = 0.12 })
+		tween(shadow, Anim.Fast, { BackgroundTransparency = 0.55 })
 	end
 
 	local function resumeTimer()
 		if not entry.alive or not entry.paused then return end
 		entry.paused = false
-		tween(toastAccent, Anim.Fast, { Transparency = 0.52 })
-		tween(toastStroke, Anim.Fast, { Color = Theme.Stroke })
-		local left = entry.remaining
-		local scale = math.clamp(left / duration, 0, 1)
-		armTimer(scale, left)
+		tween(toastStroke, Anim.Fast, { Color = Theme.Stroke, Transparency = 0.28 })
+		tween(shadow, Anim.Fast, { BackgroundTransparency = 0.72 })
+		armTimer(math.clamp(entry.remaining / duration, 0, 1), entry.remaining)
 	end
 
 	entry.dismiss = function() dismissNotif(entry) end
@@ -2841,24 +2763,15 @@ notify = function(title, body, kind, duration, opts)
 	table.insert(activeNotifs, entry)
 
 	closeBtn.MouseEnter:Connect(function()
-		tween(closeBtn, Anim.Fast, {
-			BackgroundTransparency = 0,
-			BackgroundColor3 = Color3.fromRGB(210, 70, 70),
-			TextColor3 = Color3.new(1, 1, 1),
-		})
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0, BackgroundColor3 = Theme.Error })
 	end)
 	closeBtn.MouseLeave:Connect(function()
-		tween(closeBtn, Anim.Fast, {
-			BackgroundTransparency = 0.35,
-			BackgroundColor3 = Color3.fromRGB(34, 34, 40),
-			TextColor3 = Theme.SubText,
-		})
+		tween(closeBtn, Anim.Fast, { BackgroundTransparency = 0.25, BackgroundColor3 = Color3.fromRGB(34, 34, 40) })
 	end)
 	closeBtn.MouseButton1Click:Connect(function()
 		dismissNotif(entry)
 	end)
 
-	-- Hover pad (CanvasGroup does not reliably fire mouse enter)
 	local hoverPad = make("TextButton", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
@@ -2869,16 +2782,11 @@ notify = function(title, body, kind, duration, opts)
 	hoverPad.Parent = toast
 	hoverPad.MouseEnter:Connect(pauseTimer)
 	hoverPad.MouseLeave:Connect(resumeTimer)
-	hoverPad.MouseButton1Click:Connect(function()
-		-- click empty area also dismisses
-		dismissNotif(entry)
-	end)
 
-	-- Optional action button
-	if opts.Action and opts.Action.Text and opts.Action.Callback then
+	if hasAction then
 		local act = make("TextButton", {
-			Size = UDim2.fromOffset(72, 22),
-			Position = UDim2.new(1, -104, 1, -30),
+			Size = UDim2.fromOffset(78, 24),
+			Position = UDim2.new(1, -92, 1, -34),
 			BackgroundColor3 = Theme.Element,
 			Text = opts.Action.Text,
 			Font = Enum.Font.GothamMedium,
@@ -2886,10 +2794,8 @@ notify = function(title, body, kind, duration, opts)
 			TextColor3 = Theme.Text,
 			AutoButtonColor = false,
 			ZIndex = 12,
-		}, { corner(6), stroke(Theme.Accent, 1, 0.45) })
+		}, { corner(7), stroke(color, 1, 0.4) })
 		act.Parent = toast
-		local actStroke = act:FindFirstChildOfClass("UIStroke")
-		if actStroke then registerAccent(actStroke, "Color") end
 		act.MouseEnter:Connect(function()
 			tween(act, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
 		end)
@@ -2900,30 +2806,21 @@ notify = function(title, body, kind, duration, opts)
 			task.spawn(opts.Action.Callback)
 			dismissNotif(entry)
 		end)
-		toastH += 8
-		toast.Size = UDim2.new(1, 0, 0, toastH)
 	end
 
-	-- Enter motion
-	tween(wrapper, Anim.Spring, { Size = UDim2.fromOffset(NOTIF_W, toastH) })
+	tween(wrapper, Anim.Spring, { Size = UDim2.fromOffset(NOTIF_W, toastH + 6) })
 	tween(toast, Anim.Smooth, {
 		GroupTransparency = 0,
 		Position = UDim2.fromOffset(0, 0),
 	})
 	tween(uiScale, Anim.Spring, { Scale = 1 })
-
-	-- Icon pulse + top sheen
 	task.defer(function()
-		local s = make("UIScale", { Scale = 0.7 })
+		local s = make("UIScale", { Scale = 0.75 })
 		s.Parent = iconBubble
 		tween(s, Anim.Spring, { Scale = 1 })
-		tween(topShine, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Position = UDim2.new(1, 12, 0, 0),
-		})
 	end)
 
 	armTimer(1, duration)
-
 	return entry
 end
 
@@ -3013,20 +2910,20 @@ local function createTab(nameOrConfig)
 
 	local btn = make("TextButton", {
 		Name = name,
-		Size = UDim2.new(1, 0, 0, 46),
+		Size = UDim2.new(1, 0, 0, 48),
 		BackgroundColor3 = Theme.Element,
 		BackgroundTransparency = 1,
 		Text = "",
 		AutoButtonColor = false,
 		LayoutOrder = #tabs + 1,
-		ClipsDescendants = true,
+		ClipsDescendants = false,
 	}, { corner(8) })
 	btn.Parent = tabHolder
 
 	local iconBg = make("Frame", {
 		Name = "IconBg",
-		Size = UDim2.fromOffset(30, 30),
-		Position = UDim2.fromOffset(9, 8),
+		Size = UDim2.fromOffset(32, 32),
+		Position = UDim2.fromOffset(8, 8),
 		BackgroundColor3 = Color3.fromRGB(28, 28, 32),
 		BackgroundTransparency = 0.35,
 		ZIndex = 2,
@@ -3056,31 +2953,39 @@ local function createTab(nameOrConfig)
 	})
 	iconGlyph.Parent = iconBg
 
+	-- Leave ~56px on the right for badge; icon→text gap is intentional
 	local label = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -52, 0, 16),
-		Position = UDim2.fromOffset(46, 8),
+		Size = UDim2.new(1, -96, 0, 16),
+		Position = UDim2.fromOffset(48, 8),
 		Font = Enum.Font.GothamMedium,
 		Text = name,
 		TextSize = 13,
 		TextColor3 = Theme.SubText,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		ZIndex = 2,
 	})
 	label.Parent = btn
 
 	local subLabel = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -52, 0, 14),
-		Position = UDim2.fromOffset(46, 24),
+		Size = UDim2.new(1, -96, 0, 14),
+		Position = UDim2.fromOffset(48, 26),
 		Font = Enum.Font.Gotham,
 		Text = sub,
 		TextSize = 10,
 		TextColor3 = Color3.fromRGB(100, 100, 108),
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		ZIndex = 2,
 	})
 	subLabel.Parent = btn
+
+	if Flags.SidebarCollapsed then
+		label.Visible = false
+		subLabel.Visible = false
+	end
 
 	local page = make("CanvasGroup", {
 		Name = name .. "Page",
@@ -5518,11 +5423,9 @@ local sizePresets = {
 	Wide = { 760, 500 },
 }
 local preFullscreen = nil
-local SIDEBAR_W, SIDEBAR_COLLAPSED_W = 152, 52
-local contentPanelRef = nil
-pcall(function()
-	contentPanelRef = body:FindFirstChild("ContentPanel")
-end)
+local SIDEBAR_W, SIDEBAR_COLLAPSED_W = 168, 56
+local contentPanelRef = contentPanel
+local sidebarCollapseToken = 0
 
 minimizeWindow = function()
 	minimized = not minimized
@@ -5615,13 +5518,47 @@ setSidebarCollapsed = function(on)
 				Position = UDim2.fromOffset(pad, 8),
 			})
 		end
+		if navLabel then navLabel.Visible = not on end
+		if userNameLabel then userNameLabel.Visible = not on end
+		if hintLabel then hintLabel.Visible = not on end
+		if userCard then
+			tween(userCard, Anim.Fast, {
+				BackgroundTransparency = on and 1 or 0,
+			})
+		end
 		for _, t in ipairs(tabs) do
 			if t.Label then t.Label.Visible = not on end
 			if t.SubLabel then t.SubLabel.Visible = not on end
+			if t.BadgeLabel then t.BadgeLabel.Visible = (not on) and t.BadgeLabel.Text ~= "" end
+			if t.FavMark then t.FavMark.Visible = (not on) and t.Favorite end
+			if t.IconBg then
+				t.IconBg.Position = on and UDim2.new(0.5, 0, 0.5, 0) or UDim2.fromOffset(8, 8)
+				t.IconBg.AnchorPoint = on and Vector2.new(0.5, 0.5) or Vector2.new(0, 0)
+			end
 		end
 	end)
 	return Flags.SidebarCollapsed
 end
+
+-- Hover expand / leave collapse (library feature)
+pcall(function()
+	sidebar.MouseEnter:Connect(function()
+		sidebarCollapseToken += 1
+		if Flags.AutoCollapseSidebar then
+			setSidebarCollapsed(false)
+		end
+	end)
+	sidebar.MouseLeave:Connect(function()
+		sidebarCollapseToken += 1
+		local my = sidebarCollapseToken
+		task.delay(0.22, function()
+			if my ~= sidebarCollapseToken then return end
+			if Flags.AutoCollapseSidebar and not Flags.LockLayout then
+				setSidebarCollapsed(true)
+			end
+		end)
+	end)
+end)
 
 applyWindowOpacity = function(amount)
 	amount = math.clamp(tonumber(amount) or 0, 0, 0.85)
@@ -5897,16 +5834,23 @@ enhanceTab = function(tab)
 		local badge = make("TextLabel", {
 			Name = "TabBadge",
 			BackgroundColor3 = Theme.Error,
-			Size = UDim2.fromOffset(16, 14),
-			Position = UDim2.new(1, -22, 0.5, 0),
-			AnchorPoint = Vector2.new(0, 0.5),
+			Size = UDim2.fromOffset(28, 15),
+			Position = UDim2.new(1, -6, 0, 7),
+			AnchorPoint = Vector2.new(1, 0),
 			Font = Enum.Font.GothamBold,
 			Text = "",
 			TextSize = 9,
 			TextColor3 = Color3.new(1, 1, 1),
 			Visible = false,
 			ZIndex = 6,
-		}, { corner(4) })
+			TextXAlignment = Enum.TextXAlignment.Center,
+		}, {
+			corner(4),
+			make("UIPadding", {
+				PaddingLeft = UDim.new(0, 5),
+				PaddingRight = UDim.new(0, 5),
+			}),
+		})
 		badge.Parent = btn
 		tab.BadgeLabel = badge
 	end)
@@ -5920,9 +5864,11 @@ enhanceTab = function(tab)
 				b.Text = ""
 			else
 				b.Text = tostring(text)
-				b.Visible = true
-				local w = math.clamp(#b.Text * 7 + 8, 16, 40)
-				b.Size = UDim2.fromOffset(w, 14)
+				local w = math.clamp(math.ceil(#b.Text * 6.2) + 12, 22, 56)
+				b.Size = UDim2.fromOffset(w, 15)
+				b.Position = UDim2.new(1, -6, 0, 7)
+				b.AnchorPoint = Vector2.new(1, 0)
+				b.Visible = not Flags.SidebarCollapsed
 			end
 			ConfigData.tabs = ConfigData.tabs or {}
 			ConfigData.tabs.badges = ConfigData.tabs.badges or {}
@@ -7055,6 +7001,16 @@ applyV6PublicAPI = function(Zenless)
 	W.SetSizePreset = setSizePreset
 	W.SetFullscreen = setFullscreen
 	W.SetSidebarCollapsed = setSidebarCollapsed
+	W.SetAutoCollapseSidebar = function(on)
+		if on == nil then on = not Flags.AutoCollapseSidebar end
+		setFlag("AutoCollapseSidebar", on and true or false)
+		if Flags.AutoCollapseSidebar then
+			setSidebarCollapsed(true)
+		else
+			setSidebarCollapsed(false)
+		end
+		return Flags.AutoCollapseSidebar
+	end
 	W.ApplyOpacity = applyWindowOpacity
 	W.SetOpacity = applyWindowOpacity
 	W.SetUnfocusedOpacity = function(v)
@@ -7305,14 +7261,26 @@ local skipLoader = envFlag("ZENLESS_NO_LOADER")
 
 local function bootLibrary(firstTab)
 	task.defer(function()
-		if skipLoader then
-			if loaderHost and loaderHost.Parent then
-				pcall(function() loaderHost:Destroy() end)
-			end
+		-- Always clear loader host/rim (fixes ghost glass frame when NO_LOADER)
+		if skipLoader or not playLoader then
+			pcall(function()
+				if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
+				for _, ch in ipairs(screenGui:GetChildren()) do
+					if ch.Name == "LoaderHost" or (ch.Name == "MetallicRim" and ch.Parent == screenGui) then
+						ch:Destroy()
+					end
+				end
+			end)
 		else
-			playLoader()
+			pcall(playLoader)
+			pcall(function()
+				if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
+			end)
 		end
 		showWindow()
+		if Flags.AutoCollapseSidebar and setSidebarCollapsed then
+			pcall(setSidebarCollapsed, true)
+		end
 		if firstTab then
 			task.wait(0.1)
 			Zenless:SelectTab(firstTab)
