@@ -1023,14 +1023,25 @@ local USER_NAME = player.Name
 local root = make("Frame", {
 	Name = "Root",
 	Size = UDim2.fromOffset(WIN_W, WIN_H),
-	Position = UDim2.new(0.5, 0, 0.5, 20),
-	AnchorPoint = Vector2.new(0.5, 0.5),
+	-- Always top-left anchor so drag math stays simple
+	Position = UDim2.fromOffset(80, 80),
+	AnchorPoint = Vector2.new(0, 0),
 	BackgroundTransparency = 1,
 	Visible = false,
 })
 root.Parent = screenGui
 
--- UIScale MUST NOT live on root — it breaks AbsolutePosition/Position drag math.
+-- Center once we know the viewport
+pcall(function()
+	local cam = workspace.CurrentCamera
+	local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+	root.Position = UDim2.fromOffset(
+		math.floor((vp.X - WIN_W) * 0.5),
+		math.floor((vp.Y - WIN_H) * 0.5) + 20
+	)
+end)
+
+-- UIScale MUST NOT live on root — it breaks drag position math.
 local scaleHost = make("Frame", {
 	Name = "ScaleHost",
 	Size = UDim2.new(1, 0, 1, 0),
@@ -1042,20 +1053,64 @@ scaleHost.Parent = root
 local windowScale = make("UIScale", { Scale = 0.92 })
 windowScale.Parent = scaleHost
 
--- No outer hollow rim — a transparent stroked frame reads as a ghost border.
--- Window already has its own stroke + metallic rim.
+-- Soft outer glow: filled aura layers (never a hollow transparent stroke-only frame)
+local glowFar = make("Frame", {
+	Name = "GlowFar",
+	Size = UDim2.new(1, 40, 1, 40),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundColor3 = Color3.fromRGB(190, 190, 210),
+	BackgroundTransparency = 0.94,
+	BorderSizePixel = 0,
+	ZIndex = 0,
+	Active = false,
+}, { corner(22) })
+glowFar.Parent = scaleHost
+
 local glowOuter = make("Frame", {
 	Name = "GlowOuter",
-	Size = UDim2.new(1, 0, 1, 0),
-	BackgroundTransparency = 1,
+	Size = UDim2.new(1, 26, 1, 26),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundColor3 = Color3.fromRGB(205, 205, 220),
+	BackgroundTransparency = 0.88,
 	BorderSizePixel = 0,
-	Visible = false,
 	ZIndex = 0,
-})
+	Active = false,
+}, { corner(18) })
 glowOuter.Parent = scaleHost
 
-local glowMid = glowOuter
-local glowStroke = glowOuter
+local glowMid = make("Frame", {
+	Name = "GlowMid",
+	Size = UDim2.new(1, 12, 1, 12),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundColor3 = Color3.fromRGB(225, 225, 235),
+	BackgroundTransparency = 0.8,
+	BorderSizePixel = 0,
+	ZIndex = 0,
+	Active = false,
+}, { corner(14) })
+glowMid.Parent = scaleHost
+
+-- Soft edge falloff on mid (keeps glow looking like light, not a solid slab)
+make("UIGradient", {
+	Rotation = 90,
+	Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.35),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 0.45),
+	}),
+}).Parent = glowMid
+
+local glowStroke = make("UIStroke", {
+	Name = "GlowStroke",
+	Color = Color3.fromRGB(230, 230, 240),
+	Thickness = 1.5,
+	Transparency = 0.55,
+	ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+})
+glowStroke.Parent = glowMid
 
 -- NO black drop shadow. Border stack = depth without muddy slabs.
 local windowStroke = stroke(Theme.Stroke, 1, 0.2)
@@ -1969,7 +2024,7 @@ local function rememberWindowGeometry()
 	task.defer(saveConfigFile)
 end
 
--- Drag handle: click/drag from the exact point you pressed (keeps grab under cursor)
+-- Drag handle covers title (leave right side for FPS / bell / chrome)
 local dragHandle = make("TextButton", {
 	Name = "DragHandle",
 	Size = UDim2.new(1, -220, 1, 0),
@@ -1977,7 +2032,9 @@ local dragHandle = make("TextButton", {
 	BackgroundTransparency = 1,
 	Text = "",
 	AutoButtonColor = false,
-	ZIndex = 8,
+	Active = true,
+	Selectable = false,
+	ZIndex = 50,
 })
 dragHandle.Parent = titleBar
 
@@ -1987,22 +2044,22 @@ do
 	local startMouse = Vector2.new(0, 0)
 	local startPos = Vector2.new(0, 0)
 
-	local function ensureTopLeftAnchor()
-		-- Keep Position offsets = on-screen top-left (required for delta drag)
-		local abs = root.AbsolutePosition
-		root.AnchorPoint = Vector2.new(0, 0)
-		root.Position = UDim2.fromOffset(abs.X, abs.Y)
-		targetPos = root.Position
+	local function clampRoot(x, y)
+		local vp = getViewport()
+		local w = root.Size.X.Offset
+		local h = root.Size.Y.Offset
+		x = math.clamp(x, 0, math.max(0, vp.X - w))
+		y = math.clamp(y, 0, math.max(0, vp.Y - h))
+		return x, y
 	end
 
 	local function stopDrag()
 		if not dragging then return end
 		dragging = false
-		local x = root.Position.X.Offset
-		local y = root.Position.Y.Offset
-		local w = root.Size.X.Offset
-		local h = root.Size.Y.Offset
-		x, y = snapPosition(x, y, w, h)
+		local x, y = clampRoot(root.Position.X.Offset, root.Position.Y.Offset)
+		if Flags.EdgeSnap then
+			x, y = snapPosition(x, y, root.Size.X.Offset, root.Size.Y.Offset)
+		end
 		root.Position = UDim2.fromOffset(x, y)
 		targetPos = root.Position
 		if dragMoved then
@@ -2010,12 +2067,38 @@ do
 		end
 	end
 
-	dragHandle.InputBegan:Connect(function(input)
+	local function beginDrag(mx, my)
 		if Flags.LockLayout or Flags.Fullscreen then return end
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
+		-- Keep offset-only top-left; never remap via AbsolutePosition (breaks gethui)
+		root.AnchorPoint = Vector2.new(0, 0)
+		if root.Position.X.Scale ~= 0 or root.Position.Y.Scale ~= 0 then
+			local vp = getViewport()
+			local x = root.Position.X.Scale * vp.X + root.Position.X.Offset
+			local y = root.Position.Y.Scale * vp.Y + root.Position.Y.Offset
+			root.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
 		end
+		startMouse = Vector2.new(mx, my)
+		startPos = Vector2.new(root.Position.X.Offset, root.Position.Y.Offset)
+		targetPos = root.Position
+		dragging = true
+		dragMoved = false
+		State.lastInteraction = os.clock()
+	end
 
+	local function applyDragAt(mx, my)
+		if not dragging then return end
+		local dx = mx - startMouse.X
+		local dy = my - startMouse.Y
+		if math.abs(dx) + math.abs(dy) > 1 then
+			dragMoved = true
+		end
+		local nx, ny = clampRoot(startPos.X + dx, startPos.Y + dy)
+		root.Position = UDim2.fromOffset(nx, ny)
+		targetPos = root.Position
+	end
+
+	local function tryBegin()
+		if dragging then return end
 		local now = os.clock()
 		if now - lastTitleClick < 0.32 then
 			stopDrag()
@@ -2024,37 +2107,22 @@ do
 			return
 		end
 		lastTitleClick = now
+		local m = UserInputService:GetMouseLocation()
+		beginDrag(m.X, m.Y)
+	end
 
-		ensureTopLeftAnchor()
-		startMouse = UserInputService:GetMouseLocation()
-		startPos = Vector2.new(root.Position.X.Offset, root.Position.Y.Offset)
-		dragging = true
-		dragMoved = false
-		State.lastInteraction = os.clock()
+	-- MouseButton1Down is the most reliable start signal in executors
+	dragHandle.MouseButton1Down:Connect(tryBegin)
+	dragHandle.MouseButton1Up:Connect(function()
+		if dragging then stopDrag() end
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local m = UserInputService:GetMouseLocation()
-			local delta = m - startMouse
-			if delta.Magnitude > 2 then
-				dragMoved = true
-			end
-			local nx = startPos.X + delta.X
-			local ny = startPos.Y + delta.Y
-			local vp = getViewport()
-			local w = root.Size.X.Offset
-			local h = root.Size.Y.Offset
-			nx = math.clamp(nx, 0, math.max(0, vp.X - w))
-			ny = math.clamp(ny, 0, math.max(0, vp.Y - h))
-			-- Pure delta from click — window stays glued to the grab point
-			root.Position = UDim2.fromOffset(nx, ny)
-			targetPos = root.Position
-		elseif resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
+		if resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
 			if Flags.LockLayout then return end
 			local mouse = UserInputService:GetMouseLocation()
-			local ap, asz = absRootPos()
-			local x, y, w, h = ap.X, ap.Y, asz.X, asz.Y
+			local x, y = root.Position.X.Offset, root.Position.Y.Offset
+			local w, h = root.Size.X.Offset, root.Size.Y.Offset
 			local minW, minH = 420, 280
 			if string.find(resizeEdge, "r") then w = math.max(minW, mouse.X - x) end
 			if string.find(resizeEdge, "b") then h = math.max(minH, mouse.Y - y) end
@@ -2069,10 +2137,9 @@ do
 				h = nh
 			end
 			x, y = snapPosition(x, y, w, h)
-			root.AnchorPoint = Vector2.new(0, 0)
 			root.Size = UDim2.fromOffset(w, h)
-			targetPos = UDim2.fromOffset(x, y)
-			root.Position = targetPos
+			root.Position = UDim2.fromOffset(x, y)
+			targetPos = root.Position
 			WIN_W, WIN_H = w, h
 		end
 	end)
@@ -2088,15 +2155,14 @@ do
 		end
 	end)
 
-	-- Safety: if button released outside game, still end drag
-	RunService.Heartbeat:Connect(function()
-		if dragging and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-			stopDrag()
-		end
+	-- Drive drag every frame (InputChanged is unreliable in many executors / gethui)
+	RunService.RenderStepped:Connect(function()
+		if not dragging then return end
+		local m = UserInputService:GetMouseLocation()
+		applyDragAt(m.X, m.Y)
 	end)
 end
 
--- Keep targetPos in sync (no lerp — lerp caused drag to feel "sticky"/wrong)
 targetPos = root.Position
 
 -- Resize hit pads
@@ -5227,7 +5293,9 @@ end
 local function showWindow()
 	root.Visible = true
 	window.Visible = true
-	glowOuter.Visible = false -- never show hollow outer stroke
+	glowOuter.Visible = true
+	if glowFar then glowFar.Visible = true end
+	if glowMid then glowMid.Visible = true end
 	if windowRim then windowRim.Visible = true end
 	-- restore remembered geometry — always top-left anchor for correct dragging
 	root.AnchorPoint = Vector2.new(0, 0)
@@ -5277,6 +5345,8 @@ local function hideWindow()
 	State.savedWindowPos = root.Position
 	State.savedWindowSize = root.Size
 	glowOuter.Visible = false
+	if glowFar then glowFar.Visible = false end
+	if glowMid then glowMid.Visible = false end
 	if windowRim then windowRim.Visible = false end
 	tween(window, Anim.Smooth, { GroupTransparency = 1 })
 	tween(windowScale, Anim.Smooth, { Scale = 0.94 })
@@ -5671,7 +5741,10 @@ applyWindowOpacity = function(amount)
 	State.windowOpacity = amount
 	pcall(function()
 		tween(window, Anim.Smooth, { GroupTransparency = amount })
-		if glowOuter then glowOuter.BackgroundTransparency = math.clamp(0.55 + amount, 0.55, 0.95) end
+		if glowFar then glowFar.BackgroundTransparency = math.clamp(0.94 + amount * 0.05, 0.92, 0.98) end
+		if glowOuter then glowOuter.BackgroundTransparency = math.clamp(0.88 + amount * 0.08, 0.86, 0.96) end
+		if glowMid then glowMid.BackgroundTransparency = math.clamp(0.8 + amount * 0.1, 0.78, 0.94) end
+		if glowStroke then glowStroke.Transparency = math.clamp(0.55 + amount * 0.2, 0.5, 0.9) end
 	end)
 	return State.windowOpacity
 end
