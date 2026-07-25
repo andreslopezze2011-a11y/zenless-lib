@@ -80,6 +80,8 @@ local Anim = {
 	Spring = TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 	Snap   = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	Linear = TweenInfo.new(0.2, Enum.EasingStyle.Linear),
+	Sidebar = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Minimize = TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 -- ============ V6 FLAGS / SERVICES ============
@@ -1722,13 +1724,14 @@ registerAccent(dotGlow, "BackgroundColor3")
 local titleLabel = make("TextLabel", {
 	Name = "Title",
 	BackgroundTransparency = 1,
-	Size = UDim2.new(1, -180, 1, 0),
+	Size = UDim2.new(1, -230, 1, 0),
 	Position = UDim2.fromOffset(36, 0),
 	Font = Enum.Font.GothamBold,
 	Text = "ZENLESS",
 	TextSize = 15,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
 	ZIndex = 3,
 })
 titleLabel.Parent = titleBar
@@ -1745,11 +1748,14 @@ make("TextLabel", {
 	ZIndex = 3,
 }).Parent = titleBar
 
--- FPS pill badge (left of window controls)
+-- Right chrome spacing (from right edge): controls → gap → bell → gap → fps
+-- winControls width 70 @ -12 → occupies [W-82, W-12]
+-- bell 26 @ -96 → [W-122, W-96]
+-- fps 72 @ -136 → [W-208, W-136]
 local fpsPill = make("Frame", {
 	Size = UDim2.fromOffset(72, 22),
-	Position = UDim2.new(1, -168, 0.5, 0),
-	AnchorPoint = Vector2.new(0, 0.5),
+	Position = UDim2.new(1, -136, 0.5, 0),
+	AnchorPoint = Vector2.new(1, 0.5),
 	BackgroundColor3 = Theme.Element,
 	ZIndex = 3,
 }, { corner(6), stroke(Theme.Stroke, 1, 0.45) })
@@ -1810,7 +1816,7 @@ end)
 local winControls = make("Frame", {
 	Name = "WinControls",
 	Size = UDim2.fromOffset(70, 28),
-	Position = UDim2.new(1, -14, 0.5, 0),
+	Position = UDim2.new(1, -12, 0.5, 0),
 	AnchorPoint = Vector2.new(1, 0.5),
 	BackgroundColor3 = Color3.fromRGB(22, 22, 26),
 	ZIndex = 12,
@@ -1826,10 +1832,6 @@ local winControls = make("Frame", {
 	}),
 })
 winControls.Parent = titleBar
-
--- shift FPS pill left of chrome tray
-fpsPill.Position = UDim2.new(1, -98, 0.5, 0)
-fpsPill.AnchorPoint = Vector2.new(1, 0.5)
 
 local function chromeCtrl(iconName, x, isClose)
 	local btn = make("TextButton", {
@@ -1963,40 +1965,78 @@ end
 
 do
 	local dragging = false
-	local dragStart, startAbs
+	local dragStartMouse, startAbs
+	local dragMoved = false
+
+	local function mousePos()
+		-- ScreenGui.IgnoreGuiInset = true → use raw mouse location
+		return UserInputService:GetMouseLocation()
+	end
+
+	local function isOverChrome(mx, my)
+		for _, obj in ipairs({ winControls, fpsPill }) do
+			if obj and obj.Parent then
+				local p, s = obj.AbsolutePosition, obj.AbsoluteSize
+				if mx >= p.X and mx <= p.X + s.X and my >= p.Y and my <= p.Y + s.Y then
+					return true
+				end
+			end
+		end
+		local bell = titleBar:FindFirstChild("NotifBell")
+		if bell then
+			local p, s = bell.AbsolutePosition, bell.AbsoluteSize
+			if mx >= p.X and mx <= p.X + s.X and my >= p.Y and my <= p.Y + s.Y then
+				return true
+			end
+		end
+		return false
+	end
 
 	titleBar.InputBegan:Connect(function(input)
 		if Flags.LockLayout or Flags.Fullscreen then return end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			local now = os.clock()
-			if now - lastTitleClick < 0.35 then
-				if minimizeWindow then minimizeWindow() end
-				lastTitleClick = 0
-				return
-			end
-			lastTitleClick = now
-			dragging = true
-			dragStart = input.Position
-			local ap = root.AbsolutePosition
-			startAbs = Vector2.new(ap.X, ap.Y)
-			root.AnchorPoint = Vector2.new(0, 0)
-			root.Position = UDim2.fromOffset(ap.X, ap.Y)
-			targetPos = root.Position
-			State.lastInteraction = os.clock()
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
 		end
+		local m = mousePos()
+		if isOverChrome(m.X, m.Y) then return end
+
+		local now = os.clock()
+		if now - lastTitleClick < 0.32 then
+			if minimizeWindow then minimizeWindow() end
+			lastTitleClick = 0
+			dragging = false
+			return
+		end
+		lastTitleClick = now
+		dragging = true
+		dragMoved = false
+		dragStartMouse = m
+		local ap = root.AbsolutePosition
+		startAbs = Vector2.new(ap.X, ap.Y)
+		-- lock top-left anchor so AbsolutePosition matches Position offsets
+		root.AnchorPoint = Vector2.new(0, 0)
+		root.Position = UDim2.fromOffset(ap.X, ap.Y)
+		targetPos = root.Position
+		State.lastInteraction = os.clock()
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local delta = input.Position - dragStart
+			local m = mousePos()
+			local delta = m - dragStartMouse
+			if math.abs(delta.X) + math.abs(delta.Y) > 2 then
+				dragMoved = true
+			end
 			local nx = startAbs.X + delta.X
 			local ny = startAbs.Y + delta.Y
 			local sz = root.AbsoluteSize
 			nx, ny = snapPosition(nx, ny, sz.X, sz.Y)
-			targetPos = UDim2.fromOffset(nx, ny)
+			-- apply immediately (no lerp lag — that made drag feel like it "took" the mouse)
+			root.Position = UDim2.fromOffset(nx, ny)
+			targetPos = root.Position
 		elseif resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
 			if Flags.LockLayout then return end
-			local mouse = UserInputService:GetMouseLocation()
+			local mouse = mousePos()
 			local ap, asz = absRootPos()
 			local x, y, w, h = ap.X, ap.Y, asz.X, asz.Y
 			local minW, minH = 420, 280
@@ -2028,8 +2068,11 @@ do
 				local sz = root.AbsoluteSize
 				local x, y = root.Position.X.Offset, root.Position.Y.Offset
 				x, y = snapPosition(x, y, sz.X, sz.Y)
-				targetPos = UDim2.fromOffset(x, y)
-				rememberWindowGeometry()
+				root.Position = UDim2.fromOffset(x, y)
+				targetPos = root.Position
+				if dragMoved then
+					rememberWindowGeometry()
+				end
 			end
 			if resizing then
 				resizing = false
@@ -2039,10 +2082,11 @@ do
 		end
 	end)
 
+	-- Soft follow only when NOT dragging (e.g. programmatic targetPos moves)
 	RunService.RenderStepped:Connect(function(dt)
-		if not root.Parent or resizing then return end
+		if not root.Parent or resizing or dragging then return end
 		local current = root.Position
-		local a = math.clamp(dt * 18, 0, 1)
+		local a = math.clamp(dt * 22, 0, 1)
 		root.Position = UDim2.new(
 			current.X.Scale + (targetPos.X.Scale - current.X.Scale) * a,
 			current.X.Offset + (targetPos.X.Offset - current.X.Offset) * a,
@@ -5348,10 +5392,18 @@ local sidebarCollapseToken = 0
 minimizeWindow = function()
 	minimized = not minimized
 	pcall(function()
-		tween(root, Anim.Smooth, {
+		local info = Anim.Minimize or Anim.Smooth
+		if body then
+			body.Visible = not minimized
+		end
+		tween(root, info, {
 			Size = UDim2.fromOffset(WIN_W, minimized and MINI_H or WIN_H),
 		})
-		tween(windowAccentStroke, Anim.Smooth, { Transparency = minimized and 0.7 or 0.55 })
+		tween(windowAccentStroke, info, { Transparency = minimized and 0.72 or 0.55 })
+		if windowScale then
+			windowScale.Scale = minimized and 0.97 or 1.025
+			tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
+		end
 		setMinimizeIcon(minimized and "plus" or "minus")
 		playUiSound("click")
 	end)
@@ -5426,12 +5478,13 @@ setSidebarCollapsed = function(on)
 	on = on and true or false
 	setFlag("SidebarCollapsed", on)
 	pcall(function()
+		local motion = Anim.Sidebar or Anim.Smooth
 		local w = on and SIDEBAR_COLLAPSED_W or SIDEBAR_W
-		tween(sidebar, Anim.Smooth, { Size = UDim2.new(0, w, 1, -12) })
+		tween(sidebar, motion, { Size = UDim2.new(0, w, 1, -12) })
 		local cp = contentPanelRef or body:FindFirstChild("ContentPanel")
 		if cp then
 			local pad = w + 16
-			tween(cp, Anim.Smooth, {
+			tween(cp, motion, {
 				Size = UDim2.new(1, -pad, 1, -12),
 				Position = UDim2.fromOffset(pad, 8),
 			})
@@ -5439,27 +5492,53 @@ setSidebarCollapsed = function(on)
 
 		-- Nav chrome
 		if navLabel then
-			navLabel.Visible = not on
-			navLabel.Size = on and UDim2.new(1, 0, 0, 0) or UDim2.new(1, -8, 0, 18)
+			if on then
+				tween(navLabel, Anim.Fast, { TextTransparency = 1 })
+				task.delay(0.12, function()
+					if Flags.SidebarCollapsed then
+						navLabel.Visible = false
+						navLabel.Size = UDim2.new(1, 0, 0, 0)
+					end
+				end)
+			else
+				navLabel.Visible = true
+				navLabel.Size = UDim2.new(1, -8, 0, 18)
+				navLabel.TextTransparency = 1
+				tween(navLabel, motion, { TextTransparency = 0 })
+			end
 		end
 		if tabIndicator then
 			tabIndicator.Visible = not on
 		end
 
-		-- Profile: icon-only when collapsed (no clipped "o..." text)
-		if displayNameLabel then displayNameLabel.Visible = not on end
-		if userNameLabel then userNameLabel.Visible = not on end
-		if hintLabel then hintLabel.Visible = not on end
+		-- Profile: icon-only when collapsed
+		local function fadeLabel(lbl, hide)
+			if not lbl then return end
+			if hide then
+				tween(lbl, Anim.Fast, { TextTransparency = 1 })
+				task.delay(0.12, function()
+					if Flags.SidebarCollapsed then lbl.Visible = false end
+				end)
+			else
+				lbl.Visible = true
+				lbl.TextTransparency = 1
+				tween(lbl, motion, { TextTransparency = 0 })
+			end
+		end
+		fadeLabel(displayNameLabel, on)
+		fadeLabel(userNameLabel, on)
+		fadeLabel(hintLabel, on)
+
 		if userCard then
 			userCard.ClipsDescendants = true
 			if on then
-				tween(userCard, Anim.Smooth, {
+				tween(userCard, motion, {
 					Size = UDim2.new(1, -10, 0, 48),
 					Position = UDim2.new(0, 5, 1, -56),
-					BackgroundTransparency = 0.15,
+					BackgroundTransparency = 0.12,
 				})
 			else
-				tween(userCard, Anim.Smooth, {
+				tween(userCard, motion, {
 					Size = UDim2.new(1, -16, 0, 62),
 					Position = UDim2.new(0, 8, 1, -70),
 					BackgroundTransparency = 0,
@@ -5472,13 +5551,13 @@ setSidebarCollapsed = function(on)
 		if avatar then
 			if on then
 				avatar.AnchorPoint = Vector2.new(0.5, 0.5)
-				tween(avatar, Anim.Fast, {
+				tween(avatar, motion, {
 					Position = UDim2.new(0.5, 0, 0.5, 0),
 					Size = UDim2.fromOffset(32, 32),
 				})
 			else
 				avatar.AnchorPoint = Vector2.new(0, 0.5)
-				tween(avatar, Anim.Fast, {
+				tween(avatar, motion, {
 					Position = UDim2.new(0, 10, 0.5, 0),
 					Size = UDim2.fromOffset(36, 36),
 				})
@@ -5486,15 +5565,14 @@ setSidebarCollapsed = function(on)
 		end
 		if onlineDot then
 			if on then
-				onlineDot.Position = UDim2.new(0.5, 10, 0.5, 10)
 				onlineDot.AnchorPoint = Vector2.new(0.5, 0.5)
+				tween(onlineDot, motion, { Position = UDim2.new(0.5, 10, 0.5, 10) })
 			else
 				onlineDot.AnchorPoint = Vector2.new(0, 0)
-				onlineDot.Position = UDim2.fromOffset(36, 40)
+				tween(onlineDot, motion, { Position = UDim2.fromOffset(36, 40) })
 			end
 		end
 
-		-- Tabs: centered icon rail
 		local pad = tabHolder and tabHolder:FindFirstChildOfClass("UIPadding")
 		if pad then
 			pad.PaddingLeft = UDim.new(0, on and 4 or 8)
@@ -5502,28 +5580,39 @@ setSidebarCollapsed = function(on)
 			pad.PaddingTop = UDim.new(0, on and 8 or 10)
 		end
 
-		for _, t in ipairs(tabs) do
-			if t.Label then t.Label.Visible = not on end
-			if t.SubLabel then t.SubLabel.Visible = not on end
-			if t.BadgeLabel then
-				t.BadgeLabel.Visible = (not on) and t.BadgeLabel.Text ~= "" and t.BadgeLabel.Text ~= nil
-			end
-			-- Never show favorite stars (yellow dots)
-			if t.FavMark then t.FavMark.Visible = false end
-			if t.Button then
-				t.Button.Size = on and UDim2.new(1, 0, 0, 42) or UDim2.new(1, 0, 0, 48)
-			end
-			if t.IconBg then
-				if on then
-					t.IconBg.AnchorPoint = Vector2.new(0.5, 0.5)
-					t.IconBg.Position = UDim2.new(0.5, 0, 0.5, 0)
-					t.IconBg.Size = UDim2.fromOffset(30, 30)
-				else
-					t.IconBg.AnchorPoint = Vector2.new(0, 0)
-					t.IconBg.Position = UDim2.fromOffset(8, 8)
-					t.IconBg.Size = UDim2.fromOffset(32, 32)
+		for i, t in ipairs(tabs) do
+			local delay = (i - 1) * 0.02
+			task.delay(delay, function()
+				if not t or not t.Button then return end
+				fadeLabel(t.Label, on)
+				fadeLabel(t.SubLabel, on)
+				if t.BadgeLabel then
+					if on then
+						t.BadgeLabel.Visible = false
+					else
+						t.BadgeLabel.Visible = t.BadgeLabel.Text ~= "" and t.BadgeLabel.Text ~= nil
+					end
 				end
-			end
+				if t.FavMark then t.FavMark.Visible = false end
+				tween(t.Button, motion, {
+					Size = on and UDim2.new(1, 0, 0, 42) or UDim2.new(1, 0, 0, 48),
+				})
+				if t.IconBg then
+					if on then
+						t.IconBg.AnchorPoint = Vector2.new(0.5, 0.5)
+						tween(t.IconBg, motion, {
+							Position = UDim2.new(0.5, 0, 0.5, 0),
+							Size = UDim2.fromOffset(30, 30),
+						})
+					else
+						t.IconBg.AnchorPoint = Vector2.new(0, 0)
+						tween(t.IconBg, motion, {
+							Position = UDim2.fromOffset(8, 8),
+							Size = UDim2.fromOffset(32, 32),
+						})
+					end
+				end
+			end)
 		end
 	end)
 	return Flags.SidebarCollapsed
@@ -5540,7 +5629,7 @@ pcall(function()
 	sidebar.MouseLeave:Connect(function()
 		sidebarCollapseToken += 1
 		local my = sidebarCollapseToken
-		task.delay(0.22, function()
+		task.delay(0.35, function()
 			if my ~= sidebarCollapseToken then return end
 			if Flags.AutoCollapseSidebar and not Flags.LockLayout then
 				setSidebarCollapsed(true)
@@ -6041,9 +6130,9 @@ local function createBellAndHistory()
 	if State.historyPanel and State.historyPanel.Parent then return State.historyPanel end
 	local bell = make("TextButton", {
 		Name = "NotifBell",
-		Size = UDim2.fromOffset(28, 28),
-		Position = UDim2.new(1, -118, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
+		Size = UDim2.fromOffset(26, 26),
+		Position = UDim2.new(1, -96, 0.5, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
 		BackgroundColor3 = Theme.Element,
 		BackgroundTransparency = 0.35,
 		Text = "i",
@@ -7145,13 +7234,13 @@ Zenless.Window = {
 		hideWindow()
 	end,
 	Minimize = function(state)
-		if state == nil then state = not minimized end
-		minimized = state
-		tween(root, Anim.Smooth, {
-			Size = UDim2.fromOffset(WIN_W, minimized and MINI_H or WIN_H),
-		})
-		tween(windowAccentStroke, Anim.Smooth, { Transparency = minimized and 0.7 or 0.55 })
-		setMinimizeIcon(minimized and "plus" or "minus")
+		if state == nil then
+			return minimizeWindow and minimizeWindow()
+		end
+		if (state and true or false) ~= minimized then
+			return minimizeWindow and minimizeWindow()
+		end
+		return minimized
 	end,
 	SetTitle = function(text)
 		titleLabel.Text = text
