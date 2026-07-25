@@ -15,6 +15,19 @@
 	config autosave (Flag=), resize, pin, themes, new components.
 
 	Flags (getgenv before load): ZENLESS_DEMO, ZENLESS_NO_LOADER, ZENLESS_DEV
+
+	Key system (blocks until unlocked):
+		local ok = Zenless:KeySystem({
+			Title = "ZENLESS",
+			Subtitle = "Enter your key",
+			Note = "Get a key from Discord",
+			Key = "ZENLESS-DEMO",           -- or Keys = { "A", "B" }
+			-- OnlineKey = "https://pastebin.com/raw/xxxx",
+			SaveKey = true,
+			FileName = "zenless_key.txt",
+			KeyLink = "https://discord.gg/yourinvite",
+		})
+		if not ok then return end
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -162,6 +175,7 @@ local State = {
 	floatingWindows = {},
 	inspectorEnabled = false,
 	profilerMarks = {},
+	keyGateActive = false,
 }
 
 local function safeCall(fn, ...)
@@ -1053,68 +1067,9 @@ scaleHost.Parent = root
 local windowScale = make("UIScale", { Scale = 0.92 })
 windowScale.Parent = scaleHost
 
--- Soft outer glow: filled aura layers (never a hollow transparent stroke-only frame)
-local glowFar = make("Frame", {
-	Name = "GlowFar",
-	Size = UDim2.new(1, 40, 1, 40),
-	Position = UDim2.new(0.5, 0, 0.5, 0),
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	BackgroundColor3 = Color3.fromRGB(190, 190, 210),
-	BackgroundTransparency = 0.94,
-	BorderSizePixel = 0,
-	ZIndex = 0,
-	Active = false,
-}, { corner(22) })
-glowFar.Parent = scaleHost
-
-local glowOuter = make("Frame", {
-	Name = "GlowOuter",
-	Size = UDim2.new(1, 26, 1, 26),
-	Position = UDim2.new(0.5, 0, 0.5, 0),
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	BackgroundColor3 = Color3.fromRGB(205, 205, 220),
-	BackgroundTransparency = 0.88,
-	BorderSizePixel = 0,
-	ZIndex = 0,
-	Active = false,
-}, { corner(18) })
-glowOuter.Parent = scaleHost
-
-local glowMid = make("Frame", {
-	Name = "GlowMid",
-	Size = UDim2.new(1, 12, 1, 12),
-	Position = UDim2.new(0.5, 0, 0.5, 0),
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	BackgroundColor3 = Color3.fromRGB(225, 225, 235),
-	BackgroundTransparency = 0.8,
-	BorderSizePixel = 0,
-	ZIndex = 0,
-	Active = false,
-}, { corner(14) })
-glowMid.Parent = scaleHost
-
--- Soft edge falloff on mid (keeps glow looking like light, not a solid slab)
-make("UIGradient", {
-	Rotation = 90,
-	Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.35),
-		NumberSequenceKeypoint.new(0.5, 0),
-		NumberSequenceKeypoint.new(1, 0.45),
-	}),
-}).Parent = glowMid
-
-local glowStroke = make("UIStroke", {
-	Name = "GlowStroke",
-	Color = Color3.fromRGB(230, 230, 240),
-	Thickness = 1.5,
-	Transparency = 0.55,
-	ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-})
-glowStroke.Parent = glowMid
-
--- NO black drop shadow. Border stack = depth without muddy slabs.
-local windowStroke = stroke(Theme.Stroke, 1, 0.2)
-local windowAccentStroke = stroke(Theme.Accent, 1.5, 0.55)
+-- Crisp border only — no soft filled glow / halo layers outside the window
+local windowStroke = stroke(Color3.fromRGB(200, 200, 210), 1, 0.15)
+local windowAccentStroke = stroke(Theme.Accent, 1, 0.55)
 registerAccent(windowAccentStroke, "Color")
 
 local window = make("CanvasGroup", {
@@ -5291,11 +5246,10 @@ local function destroyGui()
 end
 
 local function showWindow()
+	-- Block boot/show while KeySystem prompt is open
+	if State.keyGateActive then return end
 	root.Visible = true
 	window.Visible = true
-	glowOuter.Visible = true
-	if glowFar then glowFar.Visible = true end
-	if glowMid then glowMid.Visible = true end
 	if windowRim then windowRim.Visible = true end
 	-- restore remembered geometry — always top-left anchor for correct dragging
 	root.AnchorPoint = Vector2.new(0, 0)
@@ -5333,6 +5287,7 @@ local function showWindow()
 	tween(window, Anim.Smooth, { GroupTransparency = State.windowOpacity or 0 })
 	tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
 	tween(windowAccentStroke, Anim.Smooth, { Transparency = 0.55 })
+	tween(windowStroke, Anim.Smooth, { Transparency = 0.15 })
 	playUiSound("open")
 	if not hasCelebrated then
 		hasCelebrated = true
@@ -5344,9 +5299,6 @@ local function hideWindow()
 	rememberWindowGeometry()
 	State.savedWindowPos = root.Position
 	State.savedWindowSize = root.Size
-	glowOuter.Visible = false
-	if glowFar then glowFar.Visible = false end
-	if glowMid then glowMid.Visible = false end
 	if windowRim then windowRim.Visible = false end
 	tween(window, Anim.Smooth, { GroupTransparency = 1 })
 	tween(windowScale, Anim.Smooth, { Scale = 0.94 })
@@ -5741,10 +5693,12 @@ applyWindowOpacity = function(amount)
 	State.windowOpacity = amount
 	pcall(function()
 		tween(window, Anim.Smooth, { GroupTransparency = amount })
-		if glowFar then glowFar.BackgroundTransparency = math.clamp(0.94 + amount * 0.05, 0.92, 0.98) end
-		if glowOuter then glowOuter.BackgroundTransparency = math.clamp(0.88 + amount * 0.08, 0.86, 0.96) end
-		if glowMid then glowMid.BackgroundTransparency = math.clamp(0.8 + amount * 0.1, 0.78, 0.94) end
-		if glowStroke then glowStroke.Transparency = math.clamp(0.55 + amount * 0.2, 0.5, 0.9) end
+		if windowStroke then
+			windowStroke.Transparency = math.clamp(0.15 + amount * 0.4, 0.15, 0.85)
+		end
+		if windowAccentStroke then
+			windowAccentStroke.Transparency = math.clamp(0.55 + amount * 0.3, 0.55, 0.92)
+		end
 	end)
 	return State.windowOpacity
 end
@@ -7264,6 +7218,439 @@ end)
 
 end)()
 
+-- ============ KEY SYSTEM ============
+local function runKeySystem(opts)
+	opts = type(opts) == "table" and opts or {}
+	local title = opts.Title or "ZENLESS"
+	local subtitle = opts.Subtitle or opts.SubTitle or "Enter your key to continue"
+	local note = opts.Note or opts.Description or ""
+	local saveKey = opts.SaveKey ~= false
+	local fileName = opts.FileName or opts.KeyFile or "zenless_key.txt"
+	local keyLink = opts.KeyLink or opts.Discord or opts.Link
+	local onSuccess = opts.Callback or opts.OnSuccess
+	local onFail = opts.OnFail
+
+	local function normalizeKey(s)
+		s = tostring(s or "")
+		s = string.gsub(s, "^%s+", "")
+		s = string.gsub(s, "%s+$", "")
+		s = string.gsub(s, "%s+", "")
+		return string.upper(s)
+	end
+
+	local function httpGet(url)
+		if type(url) ~= "string" or url == "" then return nil end
+		local ok, body = pcall(function()
+			if game and game.HttpGet then
+				return game:HttpGet(url)
+			end
+			local reqFn = (typeof(http_request) == "function" and http_request)
+				or (typeof(request) == "function" and request)
+				or (syn and syn.request)
+			if reqFn then
+				local res = reqFn({ Url = url, Method = "GET" })
+				return res and (res.Body or res.body)
+			end
+			return nil
+		end)
+		if ok then return body end
+		return nil
+	end
+
+	local valid = {}
+	local function addKey(k)
+		local n = normalizeKey(k)
+		if n ~= "" then valid[n] = true end
+	end
+	if opts.Key then addKey(opts.Key) end
+	if type(opts.Keys) == "table" then
+		for _, k in ipairs(opts.Keys) do addKey(k) end
+	end
+	if type(opts.GetKey) == "function" then
+		pcall(function()
+			local k = opts.GetKey()
+			if type(k) == "table" then
+				for _, v in ipairs(k) do addKey(v) end
+			else
+				addKey(k)
+			end
+		end)
+	end
+	if type(opts.OnlineKey) == "string" then
+		local body = httpGet(opts.OnlineKey)
+		if type(body) == "string" then
+			for line in string.gmatch(body, "[^\r\n]+") do
+				local trimmed = string.gsub(line, "^%s+", "")
+				trimmed = string.gsub(trimmed, "%s+$", "")
+				if trimmed ~= "" and not string.find(trimmed, "^#") and not string.find(trimmed, "^%-%-") then
+					addKey(trimmed)
+				end
+			end
+		end
+	end
+
+	local function isValid(raw)
+		local n = normalizeKey(raw)
+		return n ~= "" and valid[n] == true
+	end
+
+	local function saveAccepted(raw)
+		if not saveKey then return end
+		pcall(function()
+			if typeof(writefile) == "function" then
+				writefile(fileName, tostring(raw))
+			end
+		end)
+	end
+
+	local function loadSaved()
+		if not saveKey then return nil end
+		local ok, data = pcall(function()
+			if typeof(readfile) ~= "function" then return nil end
+			if typeof(isfile) == "function" and not isfile(fileName) then return nil end
+			return readfile(fileName)
+		end)
+		if ok then return data end
+		return nil
+	end
+
+	-- Already unlocked via saved key
+	local saved = loadSaved()
+	if saved and isValid(saved) then
+		State.keyGateActive = false
+		pcall(function()
+			if onSuccess then onSuccess(true, saved) end
+		end)
+		pcall(function()
+			if showWindow then showWindow() end
+		end)
+		return true
+	end
+
+	-- Hide main shell while prompting (also blocks bootLibrary showWindow)
+	State.keyGateActive = true
+	pcall(function()
+		root.Visible = false
+		window.Visible = false
+		if windowRim then windowRim.Visible = false end
+	end)
+
+	local finished = false
+	local unlocked = false
+
+	local host = make("Frame", {
+		Name = "KeySystemHost",
+		Size = UDim2.fromOffset(420, 340),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		ZIndex = 200,
+	})
+	host.Parent = screenGui
+
+	local card = make("CanvasGroup", {
+		Name = "KeyCard",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.fromRGB(18, 18, 20),
+		BorderSizePixel = 0,
+		GroupTransparency = 1,
+		ZIndex = 201,
+		ClipsDescendants = true,
+	}, {
+		corner(16),
+		stroke(Color3.fromRGB(130, 130, 140), 1, 0.3),
+	})
+	card.Parent = host
+
+	make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.fromRGB(22, 22, 26),
+		BorderSizePixel = 0,
+		ZIndex = 201,
+	}, {
+		corner(16),
+		make("UIGradient", {
+			Rotation = 135,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(36, 36, 42)),
+				ColorSequenceKeypoint.new(0.55, Color3.fromRGB(18, 18, 22)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 12, 14)),
+			}),
+		}),
+	}).Parent = card
+
+	-- Sharp outline behind card (no soft filled glow)
+	local keyOutline = make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 199,
+		Active = false,
+	}, {
+		corner(16),
+		make("UIStroke", {
+			Color = Color3.fromRGB(210, 210, 220),
+			Thickness = 1,
+			Transparency = 0.25,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+	})
+	keyOutline.Parent = host
+
+	local closeBtn = make("TextButton", {
+		Size = UDim2.fromOffset(28, 28),
+		Position = UDim2.new(1, -38, 0, 12),
+		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.2,
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = 210,
+	}, { corner(8), stroke(Theme.Stroke, 1, 0.45) })
+	closeBtn.Parent = card
+	drawIcon(closeBtn, "close", Theme.SubText, 12)
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -48, 0, 28),
+		Position = UDim2.fromOffset(24, 22),
+		Font = Enum.Font.GothamBold,
+		Text = title,
+		TextSize = 20,
+		TextColor3 = Theme.Text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 205,
+	}).Parent = card
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -48, 0, 20),
+		Position = UDim2.fromOffset(24, 50),
+		Font = Enum.Font.Gotham,
+		Text = subtitle,
+		TextSize = 13,
+		TextColor3 = Theme.SubText,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 205,
+	}).Parent = card
+
+	if note ~= "" then
+		make("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -48, 0, 36),
+			Position = UDim2.fromOffset(24, 74),
+			Font = Enum.Font.Gotham,
+			Text = note,
+			TextSize = 12,
+			TextColor3 = Color3.fromRGB(150, 150, 160),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextWrapped = true,
+			ZIndex = 205,
+		}).Parent = card
+	end
+
+	local inputWrap = make("Frame", {
+		Size = UDim2.new(1, -48, 0, 42),
+		Position = UDim2.fromOffset(24, 128),
+		BackgroundColor3 = Theme.Element,
+		BorderSizePixel = 0,
+		ZIndex = 205,
+	}, { corner(10), stroke(Theme.Stroke, 1, 0.4) })
+	inputWrap.Parent = card
+
+	local box = make("TextBox", {
+		Size = UDim2.new(1, -20, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		BackgroundTransparency = 1,
+		ClearTextOnFocus = false,
+		Font = Enum.Font.GothamMedium,
+		Text = "",
+		PlaceholderText = "XXXX-XXXX-XXXX",
+		PlaceholderColor3 = Color3.fromRGB(90, 90, 100),
+		TextColor3 = Theme.Text,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 206,
+	})
+	box.Parent = inputWrap
+	if saved and tostring(saved) ~= "" then
+		box.Text = tostring(saved)
+	end
+
+	local statusLbl = make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -48, 0, 18),
+		Position = UDim2.fromOffset(24, 176),
+		Font = Enum.Font.Gotham,
+		Text = "",
+		TextSize = 12,
+		TextColor3 = Theme.Error,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 205,
+	})
+	statusLbl.Parent = card
+
+	local unlockBtn = make("TextButton", {
+		Size = UDim2.new(1, -48, 0, 40),
+		Position = UDim2.fromOffset(24, 206),
+		BackgroundColor3 = Theme.Accent,
+		Text = "Unlock",
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		TextColor3 = Color3.fromRGB(18, 18, 22),
+		AutoButtonColor = false,
+		ZIndex = 206,
+	}, { corner(10) })
+	unlockBtn.Parent = card
+
+	local getKeyBtn = make("TextButton", {
+		Size = UDim2.new(1, -48, 0, 34),
+		Position = UDim2.fromOffset(24, 256),
+		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.1,
+		Text = keyLink and "Get Key" or "Need a key?",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 13,
+		TextColor3 = Theme.SubText,
+		AutoButtonColor = false,
+		ZIndex = 206,
+		Visible = keyLink ~= nil or note ~= "",
+	}, { corner(10), stroke(Theme.Stroke, 1, 0.45) })
+	getKeyBtn.Parent = card
+
+	make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -48, 0, 16),
+		Position = UDim2.fromOffset(24, 304),
+		Font = Enum.Font.Gotham,
+		Text = "ZENLESS  ·  key system",
+		TextSize = 11,
+		TextColor3 = Color3.fromRGB(80, 80, 90),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 205,
+	}).Parent = card
+
+	local function finish(ok, raw)
+		if finished then return end
+		finished = true
+		unlocked = ok and true or false
+		State.keyGateActive = false
+		pcall(function()
+			tween(card, Anim.Smooth, { GroupTransparency = 1 })
+			if keyOutline then keyOutline.Visible = false end
+		end)
+		task.delay(0.28, function()
+			pcall(function()
+				if host and host.Parent then host:Destroy() end
+			end)
+		end)
+		if ok then
+			saveAccepted(raw)
+			pcall(function()
+				if onSuccess then onSuccess(true, raw) end
+			end)
+			pcall(function()
+				if showWindow then showWindow() end
+			end)
+			pcall(function()
+				if notify then
+					notify("Unlocked", "Welcome to " .. title, "success", 2.4)
+				end
+			end)
+		else
+			pcall(function()
+				if onFail then onFail() end
+			end)
+		end
+	end
+
+	local function shake()
+		local base = host.Position
+		task.spawn(function()
+			for i = 1, 5 do
+				host.Position = UDim2.new(base.X.Scale, base.X.Offset + ((i % 2 == 0) and 6 or -6), base.Y.Scale, base.Y.Offset)
+				task.wait(0.03)
+			end
+			host.Position = base
+		end)
+	end
+
+	local function tryUnlock()
+		local raw = box.Text
+		if isValid(raw) then
+			statusLbl.TextColor3 = Theme.Success or Color3.fromRGB(90, 200, 120)
+			statusLbl.Text = "Key accepted"
+			tween(inputWrap.UIStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.1 })
+			tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Color3.fromRGB(160, 220, 170) })
+			task.delay(0.35, function()
+				finish(true, raw)
+			end)
+		else
+			statusLbl.TextColor3 = Theme.Error
+			statusLbl.Text = "Invalid key — try again"
+			tween(inputWrap.UIStroke, Anim.Fast, { Color = Theme.Error, Transparency = 0.1 })
+			shake()
+			pcall(function()
+				if playUiSound then playUiSound("error") end
+			end)
+		end
+	end
+
+	unlockBtn.MouseButton1Click:Connect(tryUnlock)
+	box.FocusLost:Connect(function(enter)
+		if enter then tryUnlock() end
+	end)
+
+	unlockBtn.MouseEnter:Connect(function()
+		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Color3.fromRGB(220, 220, 230) })
+	end)
+	unlockBtn.MouseLeave:Connect(function()
+		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Theme.Accent })
+	end)
+
+	getKeyBtn.MouseButton1Click:Connect(function()
+		if keyLink then
+			local copied = false
+			pcall(function()
+				if typeof(setclipboard) == "function" then
+					setclipboard(tostring(keyLink))
+					copied = true
+				end
+			end)
+			statusLbl.TextColor3 = Theme.SubText
+			statusLbl.Text = copied and "Link copied to clipboard" or tostring(keyLink)
+			pcall(function()
+				if notify then
+					notify("Key link", copied and "Copied to clipboard" or tostring(keyLink), "info", 2.5)
+				end
+			end)
+		else
+			statusLbl.TextColor3 = Theme.SubText
+			statusLbl.Text = note ~= "" and note or "Ask the owner for a key"
+		end
+	end)
+
+	closeBtn.MouseButton1Click:Connect(function()
+		finish(false)
+	end)
+
+	-- Present
+	card.GroupTransparency = 1
+	host.Size = UDim2.fromOffset(400, 320)
+	tween(card, Anim.Smooth, { GroupTransparency = 0 })
+	tween(host, Anim.Spring, { Size = UDim2.fromOffset(420, 340) })
+	task.defer(function()
+		pcall(function() box:CaptureFocus() end)
+	end)
+
+	while not finished and screenGui and screenGui.Parent do
+		task.wait()
+	end
+
+	return unlocked
+end
+
 -- ============ PUBLIC LIBRARY ============
 local Zenless = {
 	Name = "ZENLESS",
@@ -7358,8 +7745,21 @@ Zenless.Window = {
 	end,
 }
 
+function Zenless:KeySystem(opts)
+	return runKeySystem(opts)
+end
+
 function Zenless:CreateWindow(config)
 	config = config or {}
+	-- Optional gate: CreateWindow({ KeySystem = { Key = "..." } }) or KeySettings =
+	local keyOpts = config.KeySettings or (type(config.KeySystem) == "table" and config.KeySystem) or nil
+	if keyOpts then
+		local ok = runKeySystem(keyOpts)
+		if not ok then
+			pcall(destroyGui)
+			return nil
+		end
+	end
 	if config.Title then
 		titleLabel.Text = config.Title
 	end
