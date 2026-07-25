@@ -7786,7 +7786,17 @@ Zenless.Window = {
 }
 
 function Zenless:KeySystem(opts)
-	return runKeySystem(opts)
+	local ok, result = pcall(runKeySystem, opts)
+	if not ok then
+		State.keyGateActive = false
+		warn("[ZENLESS] KeySystem error: ", result)
+		pcall(function()
+			if showWindow then showWindow() end
+		end)
+		return false
+	end
+	State.keyGateActive = false
+	return result and true or false
 end
 
 function Zenless:CreateWindow(config)
