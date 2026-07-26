@@ -1,5 +1,5 @@
 --[[
-	ZENLESS v6 — Universal Script GUI Library (black / grey / silver)
+	ZENLESS v6.2 — Universal Script GUI Library (black / grey / silver)
 
 	Load:
 		local Zenless = loadstring(readfile("FluentGui.lua"))()
@@ -11,8 +11,16 @@
 		Tab:AddDropdown({ Title = "Mode", Values = {...}, Multi = true })
 		Zenless:Notify({ Title = "Loaded", Type = "success", Pinned = false })
 
-	v6 highlights: edge snap, tab drag/close/Ctrl+Tab, notif history,
-	config autosave (Flag=), resize, pin, themes, new components.
+	v6.2 highlights:
+		• Premium buttons (press scale, shine sweep, dual ripple, variants)
+		• Themed FOV ring (matches accent / glass UI, glow + ticks)
+		• Action-row buttons share the same motion language
+
+	v6.1: OnUnload, SetControl/ApplyControls, CreateFOVOverlay,
+		BindLive, Toggle Description, Segmented Flag=, tab search.
+
+	v6: edge snap, tab drag/close/Ctrl+Tab, notif history,
+	config autosave (Flag=), resize, pin, themes, components.
 
 	Flags (getgenv before load):
 		ZENLESS_DEMO, ZENLESS_NO_LOADER, ZENLESS_DEV, ZENLESS_DEFER_BOOT
@@ -51,7 +59,7 @@ if not player then
 	player = Players.LocalPlayer
 end
 
-local LIBRARY_VERSION = "6.0"
+local LIBRARY_VERSION = "6.2"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "zenless_config.json"
 local SNAP_PX = 20
@@ -100,6 +108,10 @@ local Anim = {
 	Linear = TweenInfo.new(0.2, Enum.EasingStyle.Linear),
 	Sidebar = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 	Minimize = TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Press  = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Release = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	Shine  = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Soft   = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 -- ============ V6 FLAGS / SERVICES ============
@@ -181,6 +193,9 @@ local State = {
 	inspectorEnabled = false,
 	profilerMarks = {},
 	keyGateActive = false,
+	unloadHooks = {},
+	liveBinds = {},
+	overlays = {},
 }
 
 local function safeCall(fn, ...)
@@ -847,26 +862,197 @@ local function sparkBurst(parent, x, y, color, count)
 end
 
 local function clickRipple(btn, localX, localY, color)
+	if Flags.NoAnimations or Flags.ReduceMotion then return end
 	color = color or Theme.Highlight
+	local maxSize = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 1.85
+
+	-- Soft outer bloom
+	local bloom = make("Frame", {
+		Size = UDim2.fromOffset(6, 6),
+		Position = UDim2.fromOffset(localX, localY),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = color,
+		BackgroundTransparency = 0.78,
+		BorderSizePixel = 0,
+		ZIndex = 19,
+	}, { corner(999) })
+	bloom.Parent = btn
+
 	local ripple = make("Frame", {
 		Size = UDim2.fromOffset(4, 4),
 		Position = UDim2.fromOffset(localX, localY),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = color,
-		BackgroundTransparency = 0.65,
+		BackgroundTransparency = 0.55,
 		BorderSizePixel = 0,
 		ZIndex = 20,
 	}, { corner(999) })
 	ripple.Parent = btn
 
-	local maxSize = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 1.6
-	tween(ripple, TweenInfo.new(0.42, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	local ring = make("Frame", {
+		Size = UDim2.fromOffset(8, 8),
+		Position = UDim2.fromOffset(localX, localY),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 21,
+	}, { corner(999), stroke(color, 1.2, 0.35) })
+	ring.Parent = btn
+
+	tween(bloom, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(maxSize * 1.15, maxSize * 1.15),
+		BackgroundTransparency = 1,
+	})
+	tween(ripple, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Size = UDim2.fromOffset(maxSize, maxSize),
 		BackgroundTransparency = 1,
 	})
-	task.delay(0.45, function()
+	tween(ring, TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(maxSize * 0.72, maxSize * 0.72),
+	})
+	if ring:FindFirstChildOfClass("UIStroke") then
+		tween(ring:FindFirstChildOfClass("UIStroke"), TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+		})
+	end
+	task.delay(0.52, function()
+		if bloom.Parent then bloom:Destroy() end
 		if ripple.Parent then ripple:Destroy() end
+		if ring.Parent then ring:Destroy() end
 	end)
+end
+
+-- Shared premium button motion (press / shine / hover lift)
+local function decorateButton(btn, opts)
+	opts = opts or {}
+	local primary = opts.primary == true
+	local danger = opts.danger == true
+	local ghost = opts.ghost == true
+	local baseColor = opts.baseColor
+		or (danger and Theme.Error)
+		or (primary and Theme.Accent)
+		or (ghost and Theme.Element)
+		or Theme.Element
+	local hoverColor = opts.hoverColor
+		or (danger and Color3.fromRGB(230, 95, 95))
+		or (primary and Theme.AccentHover)
+		or Theme.ElementHover
+	local pressColor = opts.pressColor
+		or (danger and Color3.fromRGB(170, 50, 50))
+		or (primary and Theme.AccentSoft)
+		or Theme.ElementPress
+	local idleTransparency = ghost and 0.55 or 0
+
+	btn.ClipsDescendants = true
+	btn.AutoButtonColor = false
+	btn.BackgroundTransparency = idleTransparency
+
+	local scale = btn:FindFirstChildOfClass("UIScale")
+	if not scale then
+		scale = make("UIScale", { Scale = 1 })
+		scale.Parent = btn
+	end
+
+	local strokeObj = btn:FindFirstChildOfClass("UIStroke")
+	if not strokeObj then
+		strokeObj = stroke(primary and Color3.new(1, 1, 1) or Theme.Stroke, 1, primary and 0.55 or 0.42)
+		strokeObj.Parent = btn
+	end
+
+	-- Shine sweep (primary / danger)
+	local shine
+	if primary or danger then
+		shine = make("Frame", {
+			Name = "Shine",
+			Size = UDim2.new(0.45, 0, 1.4, 0),
+			Position = UDim2.new(-0.55, 0, 0.5, 0),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.82,
+			BorderSizePixel = 0,
+			Rotation = 18,
+			ZIndex = 3,
+		})
+		shine.Parent = btn
+		make("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.45, 0.35),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+		}).Parent = shine
+	end
+
+	local hovering = false
+	local pressing = false
+
+	local function playShine()
+		if not shine or Flags.NoAnimations then return end
+		shine.Position = UDim2.new(-0.55, 0, 0.5, 0)
+		shine.BackgroundTransparency = 0.78
+		tween(shine, Anim.Shine, {
+			Position = UDim2.new(1.55, 0, 0.5, 0),
+			BackgroundTransparency = 1,
+		})
+	end
+
+	btn.MouseEnter:Connect(function()
+		if opts.isLoading and opts.isLoading() then return end
+		hovering = true
+		tween(btn, Anim.Soft, {
+			BackgroundColor3 = hoverColor,
+			BackgroundTransparency = ghost and 0.28 or 0,
+		})
+		tween(scale, Anim.Soft, { Scale = 1.02 })
+		if strokeObj then
+			tween(strokeObj, Anim.Fast, {
+				Color = primary and Color3.new(1, 1, 1) or Theme.Accent,
+				Transparency = primary and 0.35 or 0.28,
+			})
+		end
+		playShine()
+	end)
+	btn.MouseLeave:Connect(function()
+		hovering = false
+		pressing = false
+		tween(btn, Anim.Soft, {
+			BackgroundColor3 = baseColor,
+			BackgroundTransparency = idleTransparency,
+		})
+		tween(scale, Anim.Release, { Scale = 1 })
+		if strokeObj then
+			tween(strokeObj, Anim.Fast, {
+				Color = primary and Color3.new(1, 1, 1) or Theme.Stroke,
+				Transparency = primary and 0.55 or 0.42,
+			})
+		end
+	end)
+	btn.MouseButton1Down:Connect(function()
+		if opts.isLoading and opts.isLoading() then return end
+		pressing = true
+		tween(scale, Anim.Press, { Scale = 0.965 })
+		tween(btn, Anim.Press, { BackgroundColor3 = pressColor })
+	end)
+	btn.MouseButton1Up:Connect(function()
+		pressing = false
+		tween(scale, Anim.Release, { Scale = hovering and 1.02 or 1 })
+		tween(btn, Anim.Soft, {
+			BackgroundColor3 = hovering and hoverColor or baseColor,
+		})
+	end)
+
+	return {
+		Scale = scale,
+		Stroke = strokeObj,
+		PlayShine = playShine,
+		BaseColor = function() return baseColor end,
+		RefreshColors = function(nc, nh, np)
+			baseColor, hoverColor, pressColor = nc, nh or nc, np or nc
+			if not hovering and not pressing then
+				btn.BackgroundColor3 = baseColor
+			end
+		end,
+	}
 end
 
 local function celebrateOpen(win)
@@ -3079,21 +3265,21 @@ end
 
 local function hoverCard(holder, cardStroke, cardScale)
 	holder.MouseEnter:Connect(function()
-		tween(holder, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
+		tween(holder, Anim.Soft, { BackgroundColor3 = Theme.ElementHover })
 		if cardStroke then
-			tween(cardStroke, Anim.Fast, { Color = Theme.Accent, Transparency = 0.45 })
+			tween(cardStroke, Anim.Soft, { Color = Theme.Accent, Transparency = 0.32 })
 		end
 		if cardScale then
-			tween(cardScale, Anim.Fast, { Scale = 1.012 })
+			tween(cardScale, Anim.Soft, { Scale = 1.018 })
 		end
 	end)
 	holder.MouseLeave:Connect(function()
-		tween(holder, Anim.Fast, { BackgroundColor3 = Theme.Element })
+		tween(holder, Anim.Soft, { BackgroundColor3 = Theme.Element })
 		if cardStroke then
-			tween(cardStroke, Anim.Fast, { Color = Theme.Stroke, Transparency = 0.4 })
+			tween(cardStroke, Anim.Soft, { Color = Theme.Stroke, Transparency = 0.4 })
 		end
 		if cardScale then
-			tween(cardScale, Anim.Fast, { Scale = 1 })
+			tween(cardScale, Anim.Release, { Scale = 1 })
 		end
 	end)
 end
@@ -3191,83 +3377,199 @@ end
 
 local function createButton(tab, text, callback, primary, opts)
 	opts = opts or {}
+	local variant = string.lower(tostring(opts.Variant or opts.Style or (primary and "primary" or "secondary")))
+	local isPrimary = variant == "primary" or primary == true
+	local isDanger = variant == "danger" or variant == "destructive" or opts.Danger == true
+	local isGhost = variant == "ghost" or variant == "outline"
+	local isSoft = variant == "soft"
 	local primaryText = Color3.fromRGB(16, 16, 18)
 	local loading = false
+	local iconName = opts.Icon
+
+	local baseColor = Theme.Element
+	local textColor = Theme.Text
+	if isDanger then
+		baseColor = Theme.Error
+		textColor = Color3.fromRGB(255, 245, 245)
+	elseif isPrimary then
+		baseColor = Theme.Accent
+		textColor = primaryText
+	elseif isSoft then
+		baseColor = Theme.Layer
+		textColor = Theme.Text
+	elseif isGhost then
+		baseColor = Theme.Element
+		textColor = Theme.SubText
+	end
+
+	local rowH = Flags.LargeHitboxes and 46 or 40
 	local btn = make("TextButton", {
-		Size = UDim2.new(1, 0, 0, Flags.LargeHitboxes and 44 or 38),
-		BackgroundColor3 = primary and Theme.Accent or Theme.Element,
-		Text = text,
+		Size = UDim2.new(1, 0, 0, rowH),
+		BackgroundColor3 = baseColor,
+		Text = "",
 		Font = State.uiFont,
 		TextSize = 13,
-		TextColor3 = primary and primaryText or Theme.Text,
+		TextColor3 = textColor,
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
 		ClipsDescendants = true,
-	}, { corner(8) })
+	}, { corner(9) })
 	btn.Parent = tab.Container
+	btn:SetAttribute("ZenlessTitle", text)
 	table.insert(State.focusables, btn)
 
-	local s
-	if primary then
+	if isPrimary then
 		registerAccent(btn, "BackgroundColor3")
-		s = stroke(Color3.new(1, 1, 1), 1, 0.55)
-		s.Parent = btn
 		make("UIGradient", {
-			Rotation = 90,
+			Rotation = 112,
 			Color = ColorSequence.new({
 				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 180, 190)),
+				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(230, 230, 236)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(165, 165, 178)),
+			}),
+		}).Parent = btn
+	elseif isDanger then
+		make("UIGradient", {
+			Rotation = 112,
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 140, 140)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 50, 50)),
 			}),
 		}).Parent = btn
 	else
-		s = styleCard(btn)
+		cardLit().Parent = btn
+		topHighlight(btn)
 	end
 
+	local content = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -20, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
+		ZIndex = 4,
+	})
+	content.Parent = btn
+	make("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}).Parent = content
+
+	if iconName and drawIcon then
+		local iconHost = make("Frame", {
+			Size = UDim2.fromOffset(16, 16),
+			BackgroundTransparency = 1,
+			LayoutOrder = 1,
+			ZIndex = 5,
+		})
+		iconHost.Parent = content
+		pcall(function()
+			drawIcon(iconHost, iconName, textColor, 16)
+		end)
+	end
+
+	local label = make("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(0, rowH),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Font = Enum.Font.GothamMedium,
+		Text = text,
+		TextSize = 13,
+		TextColor3 = textColor,
+		LayoutOrder = 2,
+		ZIndex = 5,
+	})
+	label.Parent = content
+
+	local feel = decorateButton(btn, {
+		primary = isPrimary,
+		danger = isDanger,
+		ghost = isGhost,
+		baseColor = baseColor,
+		isLoading = function() return loading end,
+	})
+
 	local spin = make("Frame", {
-		Size = UDim2.fromOffset(14, 14),
+		Size = UDim2.fromOffset(16, 16),
 		Position = UDim2.new(0.5, 0, 0.5, 0),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
 		Visible = false,
-		ZIndex = 5,
+		ZIndex = 6,
 	})
 	spin.Parent = btn
-	local spinArc = make("Frame", {
-		Size = UDim2.fromOffset(14, 14),
-		BackgroundColor3 = primary and primaryText or Theme.Accent,
-		BackgroundTransparency = 0.3,
-	}, { corner(7) })
-	spinArc.Parent = spin
+	local spinStroke = stroke(isPrimary and primaryText or Theme.Accent, 2, 0.15)
+	spinStroke.Parent = spin
+	make("UICorner", { CornerRadius = UDim.new(1, 0) }).Parent = spin
+	-- cut arc illusion
+	make("Frame", {
+		Size = UDim2.fromOffset(8, 8),
+		Position = UDim2.fromOffset(-2, -2),
+		BackgroundColor3 = baseColor,
+		BorderSizePixel = 0,
+		ZIndex = 7,
+	}).Parent = spin
 
 	local api = {}
 	function api.SetLoading(on)
 		loading = on and true or false
 		btn.Active = not loading
-		btn.TextTransparency = loading and 1 or 0
+		label.TextTransparency = loading and 1 or 0
+		content.Visible = not loading
 		spin.Visible = loading
 		if loading then
 			task.spawn(function()
 				while loading and spin.Parent do
-					spin.Rotation += 18
-					task.wait(0.03)
+					spin.Rotation += 16
+					task.wait(0.025)
 				end
 			end)
 		end
 	end
-	function api.SetText(t) btn.Text = t end
+	function api.SetText(t)
+		label.Text = tostring(t or "")
+		btn:SetAttribute("ZenlessTitle", label.Text)
+	end
+	function api.Flash(kind)
+		local c = (kind == "success" and Theme.Success)
+			or (kind == "error" and Theme.Error)
+			or Theme.Accent
+		local prev = btn.BackgroundColor3
+		tween(btn, Anim.Fast, { BackgroundColor3 = c })
+		task.delay(0.22, function()
+			if btn.Parent then tween(btn, Anim.Smooth, { BackgroundColor3 = prev }) end
+		end)
+		if feel and feel.PlayShine then feel.PlayShine() end
+	end
+	function api.Pulse()
+		if feel and feel.Scale then
+			tween(feel.Scale, Anim.Press, { Scale = 1.04 })
+			task.delay(0.12, function()
+				if feel.Scale and feel.Scale.Parent then
+					tween(feel.Scale, Anim.Release, { Scale = 1 })
+				end
+			end)
+		end
+	end
 
-	btn.MouseEnter:Connect(function()
-		if loading then return end
-		tween(btn, Anim.Fast, { BackgroundColor3 = primary and Theme.AccentHover or Theme.ElementHover })
-	end)
-	btn.MouseLeave:Connect(function()
-		tween(btn, Anim.Fast, { BackgroundColor3 = primary and Theme.Accent or Theme.Element })
-	end)
 	btn.MouseButton1Click:Connect(function()
 		if loading then return end
 		local run = function()
+			playUiSound("click")
 			local mouse = UserInputService:GetMouseLocation()
-			clickRipple(btn, mouse.X - btn.AbsolutePosition.X, mouse.Y - btn.AbsolutePosition.Y, Theme.Highlight)
+			local lx = mouse.X - btn.AbsolutePosition.X
+			local ly = mouse.Y - btn.AbsolutePosition.Y
+			clickRipple(btn, lx, ly, isPrimary and Color3.new(1, 1, 1) or Theme.Accent)
+			if isPrimary and fxLayer then
+				sparkBurst(
+					fxLayer,
+					btn.AbsolutePosition.X - window.AbsolutePosition.X + lx,
+					btn.AbsolutePosition.Y - window.AbsolutePosition.Y + ly,
+					Theme.Accent,
+					6
+				)
+			end
 			safeCall(callback)
 		end
 		if opts.Confirm then
@@ -3288,31 +3590,52 @@ local function createToggle(tab, text, default, callback, opts)
 	opts = opts or {}
 	local group = opts.Group
 	local flag = opts.Flag
+	local desc = opts.Description or opts.Desc or opts.Sub
 	local state = default or false
 	if flag and ConfigData.values[flag] ~= nil then state = ConfigData.values[flag] and true or false end
 
+	local rowH = Flags.LargeHitboxes and 44 or 38
+	if desc and desc ~= "" then rowH = math.max(rowH, 52) end
+
 	local holder = make("TextButton", {
-		Size = UDim2.new(1, 0, 0, Flags.LargeHitboxes and 44 or 38),
+		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = Theme.Element,
 		Text = "",
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
 	}, { corner(8) })
 	holder.Parent = tab.Container
+	holder:SetAttribute("ZenlessTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
 	hoverCard(holder, cardStroke, cardScale)
 	table.insert(State.focusables, holder)
 
-	make("TextLabel", {
+	local titleLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -68, 1, 0),
-		Position = UDim2.fromOffset(14, 0),
+		Size = UDim2.new(1, -68, desc and 0.55 or 1, 0),
+		Position = UDim2.fromOffset(14, desc and 4 or 0),
 		Font = State.uiFont,
 		Text = text,
 		TextSize = 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
-	}).Parent = holder
+	})
+	titleLbl.Parent = holder
+
+	if desc and desc ~= "" then
+		make("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -68, 0, 16),
+			Position = UDim2.new(0, 14, 1, -20),
+			Font = Enum.Font.Gotham,
+			Text = desc,
+			TextSize = 10,
+			TextColor3 = Theme.SubText,
+			TextTransparency = 0.15,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}).Parent = holder
+	end
 
 	local track = make("Frame", {
 		Size = UDim2.fromOffset(42, 22),
@@ -3346,6 +3669,7 @@ local function createToggle(tab, text, default, callback, opts)
 		end,
 		Get = function() return state end,
 		Flag = flag,
+		Title = text,
 	}
 	if flag then State.controlRegistry[flag] = api end
 	if group then
@@ -3394,6 +3718,7 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 		LayoutOrder = nextOrder(),
 	}, { corner(8) })
 	holder.Parent = tab.Container
+	holder:SetAttribute("ZenlessTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
 	hoverCard(holder, cardStroke, cardScale)
 	table.insert(State.focusables, holder)
@@ -4257,8 +4582,13 @@ local function createProgress(tab, text, value0to100)
 	}
 end
 
-local function createSegmented(tab, text, options, default, callback)
+local function createSegmented(tab, text, options, default, callback, opts)
+	opts = opts or {}
+	local flag = opts.Flag
 	local selected = default or options[1]
+	if flag and ConfigData.values[flag] ~= nil then
+		selected = ConfigData.values[flag]
+	end
 
 	local holder = make("Frame", {
 		Size = UDim2.new(1, 0, 0, 68),
@@ -4266,6 +4596,7 @@ local function createSegmented(tab, text, options, default, callback)
 		LayoutOrder = nextOrder(),
 	}, { corner(8) })
 	holder.Parent = tab.Container
+	holder:SetAttribute("ZenlessTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
 	hoverCard(holder, cardStroke, cardScale)
 
@@ -4313,6 +4644,20 @@ local function createSegmented(tab, text, options, default, callback)
 		end
 	end
 
+	local api
+	api = {
+		Get = function() return selected end,
+		Set = function(v, silent)
+			if v == nil then return end
+			selected = v
+			renderSeg()
+			if flag then ConfigData.values[flag] = selected; task.defer(saveConfigFile) end
+			if not silent then safeCall(callback, selected) end
+		end,
+		Flag = flag,
+	}
+	if flag then State.controlRegistry[flag] = api end
+
 	for i, opt in ipairs(options) do
 		local segBtn = make("TextButton", {
 			Size = UDim2.new(1 / #options, -2, 1, 0),
@@ -4330,13 +4675,12 @@ local function createSegmented(tab, text, options, default, callback)
 		buttons[opt] = segBtn
 
 		segBtn.MouseButton1Click:Connect(function()
-			selected = opt
-			renderSeg()
-			if callback then task.spawn(callback, opt) end
+			api.Set(opt)
 		end)
 	end
 
-	return { Get = function() return selected end, Set = function(v) selected = v; renderSeg() end }
+	renderSeg()
+	return api
 end
 
 local function createBadgeRow(tab, labels)
@@ -4658,7 +5002,7 @@ end
 
 local function createActionRow(tab, actions)
 	local row = make("Frame", {
-		Size = UDim2.new(1, 0, 0, 38),
+		Size = UDim2.new(1, 0, 0, 42),
 		BackgroundTransparency = 1,
 		LayoutOrder = nextOrder(),
 	})
@@ -4666,30 +5010,63 @@ local function createActionRow(tab, actions)
 
 	make("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
-		Padding = UDim.new(0, 6),
+		Padding = UDim.new(0, 8),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}).Parent = row
 
 	for i, action in ipairs(actions) do
+		local isPrimary = action.primary == true
+		local isDanger = action.danger == true or action.Danger == true
+		local base = isDanger and Theme.Error or (isPrimary and Theme.Accent or Theme.Element)
+		local textCol = (isPrimary or isDanger) and Color3.fromRGB(16, 16, 18) or Theme.Text
+		if isDanger then textCol = Color3.fromRGB(255, 245, 245) end
+
 		local btn = make("TextButton", {
-			Size = UDim2.new(1 / #actions, -4, 1, 0),
-			BackgroundColor3 = action.primary and Theme.Accent or Theme.Element,
+			Size = UDim2.new(1 / #actions, -5, 1, 0),
+			BackgroundColor3 = base,
 			Text = action.text,
 			Font = Enum.Font.GothamMedium,
-			TextSize = 11,
-			TextColor3 = Theme.Text,
+			TextSize = 12,
+			TextColor3 = textCol,
 			AutoButtonColor = false,
 			LayoutOrder = i,
-		}, { corner(6) })
+			ClipsDescendants = true,
+		}, { corner(8) })
 		btn.Parent = row
-		if action.primary then registerAccent(btn, "BackgroundColor3") end
-		styleCard(btn)
+		if isPrimary then
+			registerAccent(btn, "BackgroundColor3")
+			make("UIGradient", {
+				Rotation = 110,
+				Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+					ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 170, 182)),
+				}),
+			}).Parent = btn
+		elseif not isDanger then
+			cardLit().Parent = btn
+			topHighlight(btn)
+		end
+
+		decorateButton(btn, {
+			primary = isPrimary,
+			danger = isDanger,
+			baseColor = base,
+		})
 
 		btn.MouseButton1Click:Connect(function()
+			playUiSound("click")
 			local lx = btn.AbsoluteSize.X * 0.5
 			local ly = btn.AbsoluteSize.Y * 0.5
-			clickRipple(btn, lx, ly)
-			if action.primary and fxLayer then sparkBurst(fxLayer, btn.AbsolutePosition.X - window.AbsolutePosition.X + lx, btn.AbsolutePosition.Y - window.AbsolutePosition.Y + ly, Theme.Accent, 5) end
+			clickRipple(btn, lx, ly, isPrimary and Color3.new(1, 1, 1) or Theme.Accent)
+			if isPrimary and fxLayer then
+				sparkBurst(
+					fxLayer,
+					btn.AbsolutePosition.X - window.AbsolutePosition.X + lx,
+					btn.AbsolutePosition.Y - window.AbsolutePosition.Y + ly,
+					Theme.Accent,
+					6
+				)
+			end
 			if action.callback then task.spawn(action.callback) end
 		end)
 	end
@@ -4777,6 +5154,10 @@ local function createMetricPanel(tab, title, metrics)
 		Set = function(label, val)
 			if refs[label] then refs[label].Text = tostring(val) end
 		end,
+		SetValue = function(label, val)
+			if refs[label] then refs[label].Text = tostring(val) end
+		end,
+		GetRefs = function() return refs end,
 	}
 end
 
@@ -5157,6 +5538,17 @@ bindTabAPI = function(tab)
 		opts = opts or {}
 		return createButton(self, opts.Title or opts.Text or "Button", opts.Callback, opts.Primary, opts)
 	end
+	function tab:AddDangerButton(opts)
+		opts = opts or {}
+		opts.Variant = "danger"
+		opts.Danger = true
+		return createButton(self, opts.Title or opts.Text or "Danger", opts.Callback, false, opts)
+	end
+	function tab:AddGhostButton(opts)
+		opts = opts or {}
+		opts.Variant = "ghost"
+		return createButton(self, opts.Title or opts.Text or "Ghost", opts.Callback, false, opts)
+	end
 	function tab:AddToggle(opts)
 		opts = opts or {}
 		return createToggle(self, opts.Title or opts.Text or "Toggle", opts.Default, opts.Callback, opts)
@@ -5187,7 +5579,7 @@ bindTabAPI = function(tab)
 	end
 	function tab:AddSegmented(opts)
 		opts = opts or {}
-		return V5.createSegmented(self, opts.Title or opts.Text or "Option", opts.Values or opts.Options or {}, opts.Default, opts.Callback)
+		return V5.createSegmented(self, opts.Title or opts.Text or "Option", opts.Values or opts.Options or {}, opts.Default, opts.Callback, opts)
 	end
 	function tab:AddBadgeRow(labels)
 		return V5.createBadgeRow(self, labels)
@@ -5222,6 +5614,19 @@ bindTabAPI = function(tab)
 		opts = opts or {}
 		return V5.createMetricPanel(self, opts.Title or "Metrics", opts.Metrics or opts.Items or {})
 	end
+	function tab:AddStatRow(opts)
+		-- Compact horizontal status row (Target / FOV / Mode style)
+		opts = opts or {}
+		local metrics = opts.Metrics or opts.Items or opts.Stats or {}
+		local mapped = {}
+		for i, m in ipairs(metrics) do
+			mapped[i] = {
+				label = m.label or m.Title or m.Name or ("Stat " .. i),
+				value = m.value or m.Value or "—",
+			}
+		end
+		return V5.createMetricPanel(self, opts.Title or opts.Label or "STATUS", mapped)
+	end
 	function tab:AddChecklist(opts)
 		opts = opts or {}
 		return V5.createChecklist(self, opts.Title or "Checklist", opts.Items or {}, opts.Callback)
@@ -5240,6 +5645,77 @@ bindTabAPI = function(tab)
 	function tab:AddHotkeyHint(keys, description)
 		return V5.createHotkeyHint(self, keys, description)
 	end
+	function tab:AddSearch(opts)
+		opts = opts or {}
+		local placeholder = opts.Placeholder or opts.PlaceholderText or "Filter controls…"
+		local holder = make("Frame", {
+			Size = UDim2.new(1, 0, 0, 36),
+			BackgroundColor3 = Theme.Element,
+			LayoutOrder = -1000,
+		}, { corner(8) })
+		holder.Parent = self.Container
+		holder:SetAttribute("ZenlessSearch", true)
+		styleCard(holder)
+
+		local box = make("TextBox", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -20, 1, 0),
+			Position = UDim2.fromOffset(12, 0),
+			Font = Enum.Font.Gotham,
+			PlaceholderText = placeholder,
+			PlaceholderColor3 = Theme.SubText,
+			Text = "",
+			TextSize = 12,
+			TextColor3 = Theme.Text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ClearTextOnFocus = false,
+		})
+		box.Parent = holder
+
+		local function applyFilter(query)
+			query = string.lower(tostring(query or ""))
+			for _, child in ipairs(self.Container:GetChildren()) do
+				if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+					if child:GetAttribute("ZenlessSearch") then
+						child.Visible = true
+					elseif query == "" then
+						child.Visible = true
+					else
+						local title = tostring(child:GetAttribute("ZenlessTitle") or "")
+						local hit = string.find(string.lower(title), query, 1, true) ~= nil
+						if not hit then
+							for _, d in ipairs(child:GetDescendants()) do
+								if d:IsA("TextLabel") or d:IsA("TextButton") then
+									local t = string.lower(d.Text or "")
+									if t ~= "" and string.find(t, query, 1, true) then
+										hit = true
+										break
+									end
+								end
+							end
+						end
+						child.Visible = hit
+					end
+				end
+			end
+		end
+
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			applyFilter(box.Text)
+		end)
+
+		return {
+			Clear = function()
+				box.Text = ""
+				applyFilter("")
+			end,
+			Set = function(q)
+				box.Text = tostring(q or "")
+				applyFilter(box.Text)
+			end,
+			Get = function() return box.Text end,
+		}
+	end
 	return tab
 end
 
@@ -5249,17 +5725,43 @@ local minimized = false
 local hasCelebrated = false
 local toggleKey = Enum.KeyCode.RightShift
 
+local function runUnloadHooks()
+	local hooks = State.unloadHooks
+	State.unloadHooks = {}
+	for i = 1, #hooks do
+		safeCall(hooks[i])
+	end
+	for id, bind in pairs(State.liveBinds) do
+		if type(bind) == "table" and bind.stop then
+			pcall(bind.stop)
+		end
+		State.liveBinds[id] = nil
+	end
+	for id, overlay in pairs(State.overlays) do
+		if type(overlay) == "table" and overlay.Destroy then
+			pcall(overlay.Destroy)
+		end
+		State.overlays[id] = nil
+	end
+end
+
 local function destroyGui()
+	if State._destroying then return end
+	State._destroying = true
 	uiVisible = false
+	runUnloadHooks()
 	if loaderHost and loaderHost.Parent then
 		pcall(function() loaderHost:Destroy() end)
 	end
-	tween(window, Anim.Smooth, { GroupTransparency = 1 })
-	tween(windowScale, Anim.Smooth, { Scale = 0.92 })
+	pcall(function()
+		tween(window, Anim.Smooth, { GroupTransparency = 1 })
+		tween(windowScale, Anim.Smooth, { Scale = 0.92 })
+	end)
 	task.delay(0.28, function()
 		if screenGui and screenGui.Parent then
 			screenGui:Destroy()
 		end
+		State._destroying = false
 	end)
 end
 
@@ -5355,6 +5857,7 @@ end)
 
 -- ============ V6 MEGA CHUNK ============
 local showConfirmModal, enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
+local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
 (function()
 -- ============ ZENLESS V6 CHUNK (splice into FluentGui.lua, same scope) ============
 -- Place AFTER: local minimized / window shell / createTab / notify / tabs exist.
@@ -7064,9 +7567,323 @@ do
 end
 
 -- ---- 12) Public API attach ----
+createFOVOverlay = function(opts)
+	opts = opts or {}
+	local CoreGui = game:GetService("CoreGui")
+	local parent
+	pcall(function()
+		if gethui then parent = gethui() end
+	end)
+	parent = parent or CoreGui
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = opts.Name or "ZenlessFOV"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	pcall(function()
+		if syn and syn.protect_gui then syn.protect_gui(gui) end
+	end)
+	gui.Parent = parent
+
+	local matchTheme = opts.MatchTheme ~= false and opts.MatchUI ~= false
+	local showTicks = opts.Ticks ~= false
+	local showGlow = opts.Glow ~= false
+	local syncAccent = opts.SyncAccent ~= false
+	local radius = tonumber(opts.Radius or opts.FOV) or 180
+	local color = opts.Color or Theme.Accent
+	local thickness = tonumber(opts.Thickness) or 1.35
+	local fillT = math.clamp(tonumber(opts.FillTransparency or opts.Fill) or 0.93, 0.55, 1)
+	local pulse = opts.Pulse ~= false
+	local visible = opts.Visible ~= false
+	local pulseOn = false
+	local t = 0
+
+	-- Outer soft glow (matches window silver bloom)
+	local glow = Instance.new("Frame")
+	glow.Name = "Glow"
+	glow.AnchorPoint = Vector2.new(0.5, 0.5)
+	glow.BackgroundColor3 = color
+	glow.BackgroundTransparency = 0.94
+	glow.BorderSizePixel = 0
+	glow.Size = UDim2.fromOffset(radius * 2 + 18, radius * 2 + 18)
+	glow.Visible = visible and showGlow
+	glow.Parent = gui
+	Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
+	local glowGrad = Instance.new("UIGradient")
+	glowGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.55),
+		NumberSequenceKeypoint.new(0.7, 0.85),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	glowGrad.Parent = glow
+
+	local ring = Instance.new("Frame")
+	ring.Name = "Ring"
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.BackgroundTransparency = 1
+	ring.Size = UDim2.fromOffset(radius * 2, radius * 2)
+	ring.Visible = visible
+	ring.Parent = gui
+	Instance.new("UICorner", ring).CornerRadius = UDim.new(1, 0)
+
+	-- Glass fill — UI dark layer tinted with accent
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.BackgroundColor3 = matchTheme and Theme.Background or color
+	fill.BackgroundTransparency = matchTheme and math.max(fillT, 0.88) or fillT
+	fill.BorderSizePixel = 0
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.Parent = ring
+	Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+	local fillAccent = Instance.new("Frame")
+	fillAccent.Name = "AccentWash"
+	fillAccent.BackgroundColor3 = color
+	fillAccent.BackgroundTransparency = 0.94
+	fillAccent.BorderSizePixel = 0
+	fillAccent.Size = UDim2.new(1, 0, 1, 0)
+	fillAccent.Parent = fill
+	Instance.new("UICorner", fillAccent).CornerRadius = UDim.new(1, 0)
+
+	-- Dual stroke like the main window rim
+	local strokeOuter = Instance.new("UIStroke")
+	strokeOuter.Name = "Outer"
+	strokeOuter.Color = matchTheme and Theme.Stroke or color
+	strokeOuter.Thickness = thickness + 0.8
+	strokeOuter.Transparency = 0.62
+	strokeOuter.Parent = ring
+
+	local strokeObj = Instance.new("UIStroke")
+	strokeObj.Name = "Accent"
+	strokeObj.Color = color
+	strokeObj.Thickness = thickness
+	strokeObj.Transparency = 0.28
+	strokeObj.Parent = ring
+
+	local strokeInner = Instance.new("UIStroke")
+	strokeInner.Name = "Highlight"
+	strokeInner.Color = Theme.Highlight
+	strokeInner.Thickness = 1
+	strokeInner.Transparency = 0.78
+	strokeInner.Parent = ring
+
+	-- Cardinal ticks (crosshair language matching sidebar ticks)
+	local ticks = Instance.new("Folder")
+	ticks.Name = "Ticks"
+	ticks.Parent = ring
+	local tickFrames = {}
+	if showTicks then
+		local specs = {
+			{ 0.5, 0, 0.5, 0 }, -- N
+			{ 0.5, 1, 0.5, 1 }, -- S
+			{ 0, 0.5, 0, 0.5 }, -- W
+			{ 1, 0.5, 1, 0.5 }, -- E
+		}
+		for i, s in ipairs(specs) do
+			local vertical = (i <= 2)
+			local tick = Instance.new("Frame")
+			tick.Name = "Tick" .. i
+			tick.AnchorPoint = Vector2.new(s[3], s[4])
+			tick.Position = UDim2.fromScale(s[1], s[2])
+			tick.BackgroundColor3 = color
+			tick.BackgroundTransparency = 0.2
+			tick.BorderSizePixel = 0
+			tick.Size = vertical and UDim2.fromOffset(2, 10) or UDim2.fromOffset(10, 2)
+			tick.ZIndex = 3
+			tick.Parent = ticks
+			Instance.new("UICorner", tick).CornerRadius = UDim.new(1, 0)
+			table.insert(tickFrames, tick)
+		end
+	end
+
+	-- Tiny center pip
+	local pip = Instance.new("Frame")
+	pip.Name = "Pip"
+	pip.AnchorPoint = Vector2.new(0.5, 0.5)
+	pip.Position = UDim2.fromScale(0.5, 0.5)
+	pip.Size = UDim2.fromOffset(3, 3)
+	pip.BackgroundColor3 = color
+	pip.BackgroundTransparency = 0.35
+	pip.BorderSizePixel = 0
+	pip.ZIndex = 4
+	pip.Parent = ring
+	Instance.new("UICorner", pip).CornerRadius = UDim.new(1, 0)
+
+	if syncAccent then
+		registerAccent(strokeObj, "Color")
+		registerAccent(fillAccent, "BackgroundColor3")
+		registerAccent(glow, "BackgroundColor3")
+		registerAccent(pip, "BackgroundColor3")
+		for _, tick in ipairs(tickFrames) do
+			registerAccent(tick, "BackgroundColor3")
+		end
+	end
+
+	local id = "fov_" .. tostring(os.clock()):gsub("%.", "")
+	local alive = true
+
+	local function applyColor(c)
+		if typeof(c) ~= "Color3" then return end
+		color = c
+		strokeObj.Color = c
+		fillAccent.BackgroundColor3 = c
+		glow.BackgroundColor3 = c
+		pip.BackgroundColor3 = c
+		for _, tick in ipairs(tickFrames) do
+			tick.BackgroundColor3 = c
+		end
+		if not matchTheme then
+			fill.BackgroundColor3 = c
+			strokeOuter.Color = c
+		end
+	end
+
+	local api
+	api = {
+		Gui = gui,
+		Ring = ring,
+		Glow = glow,
+		SetRadius = function(r)
+			radius = math.max(4, tonumber(r) or radius)
+			local d = radius * 2
+			ring.Size = UDim2.fromOffset(d, d)
+			glow.Size = UDim2.fromOffset(d + 18, d + 18)
+		end,
+		SetVisible = function(on)
+			visible = on and true or false
+			ring.Visible = visible
+			glow.Visible = visible and showGlow
+		end,
+		SetColor = applyColor,
+		SetFill = function(v)
+			fillT = math.clamp(tonumber(v) or fillT, 0.55, 1)
+			fill.BackgroundTransparency = matchTheme and math.max(fillT, 0.88) or fillT
+		end,
+		SetThickness = function(v)
+			thickness = math.clamp(tonumber(v) or thickness, 1, 8)
+			strokeObj.Thickness = thickness
+			strokeOuter.Thickness = thickness + 0.8
+		end,
+		SetPulse = function(on)
+			pulse = on and true or false
+		end,
+		SetAiming = function(on)
+			pulseOn = on and true or false
+			if not pulseOn then
+				strokeObj.Transparency = 0.28
+				strokeInner.Transparency = 0.78
+				glow.BackgroundTransparency = 0.94
+			end
+		end,
+		MatchTheme = function(on)
+			matchTheme = on and true or false
+			applyColor(color)
+			fill.BackgroundColor3 = matchTheme and Theme.Background or color
+			strokeOuter.Color = matchTheme and Theme.Stroke or color
+		end,
+		Update = function()
+			local cam = workspace.CurrentCamera
+			if not cam then return end
+			local vp = cam.ViewportSize
+			local cx, cy = vp.X * 0.5, vp.Y * 0.5
+			local d = math.max(8, radius * 2)
+			ring.Position = UDim2.fromOffset(cx, cy)
+			glow.Position = UDim2.fromOffset(cx, cy)
+			ring.Size = UDim2.fromOffset(d, d)
+			glow.Size = UDim2.fromOffset(d + 18, d + 18)
+			ring.Visible = visible
+			glow.Visible = visible and showGlow
+			strokeObj.Thickness = thickness
+			strokeOuter.Thickness = thickness + 0.8
+			fill.BackgroundTransparency = matchTheme and math.max(fillT, 0.88) or fillT
+			if syncAccent and matchTheme then
+				-- keep live with Theme.Accent when user changes it via picker
+				if strokeObj.Color ~= Theme.Accent and opts.Color == nil then
+					applyColor(Theme.Accent)
+				end
+			end
+		end,
+		Destroy = function()
+			alive = false
+			State.overlays[id] = nil
+			pcall(function() gui:Destroy() end)
+		end,
+	}
+
+	task.spawn(function()
+		while alive and gui.Parent do
+			task.wait(0.04)
+			api.Update()
+			if pulse and visible and pulseOn then
+				t += 0.04
+				local wave = math.sin(t * 4.2) * 0.5 + 0.5
+				strokeObj.Transparency = 0.12 + wave * 0.2
+				strokeInner.Transparency = 0.55 + wave * 0.25
+				glow.BackgroundTransparency = 0.88 + wave * 0.08
+				pip.BackgroundTransparency = 0.15 + wave * 0.25
+			elseif visible then
+				strokeObj.Transparency = 0.28
+				strokeInner.Transparency = 0.78
+				glow.BackgroundTransparency = 0.94
+				pip.BackgroundTransparency = 0.35
+			end
+		end
+	end)
+
+	State.overlays[id] = api
+	if matchTheme and opts.Color == nil then
+		applyColor(Theme.Accent)
+	else
+		applyColor(color)
+	end
+	api.Update()
+	return api
+end
+
+setControlByFlag = function(flag, value, silent)
+	if type(flag) ~= "string" or flag == "" then return false end
+	local api = State.controlRegistry[flag]
+	if not api or type(api.Set) ~= "function" then
+		ConfigData.values[flag] = value
+		return false
+	end
+	api.Set(value, silent == true)
+	return true
+end
+
+applyControlsMap = function(map, silent)
+	if type(map) ~= "table" then return 0 end
+	local n = 0
+	for flag, value in pairs(map) do
+		if setControlByFlag(flag, value, silent) then n += 1 end
+	end
+	return n
+end
+
+bindLive = function(interval, fn)
+	interval = math.max(0.05, tonumber(interval) or 0.25)
+	local id = "live_" .. tostring(os.clock()):gsub("%.", "") .. "_" .. tostring(math.random(1000, 9999))
+	local stopped = false
+	local entry = {
+		stop = function()
+			stopped = true
+			State.liveBinds[id] = nil
+		end,
+	}
+	State.liveBinds[id] = entry
+	task.spawn(function()
+		while not stopped and screenGui and screenGui.Parent do
+			safeCall(fn)
+			task.wait(interval)
+		end
+		State.liveBinds[id] = nil
+	end)
+	return entry
+end
+
 applyV6PublicAPI = function(Zenless)
 	if type(Zenless) ~= "table" then return Zenless end
-	Zenless.Version = LIBRARY_VERSION or Zenless.Version or "6.0"
+	Zenless.Version = LIBRARY_VERSION or Zenless.Version or "6.2"
 	Zenless.Flags = Flags
 	Zenless.SetFlag = function(_, name, value) return setFlag(name, value) end
 	Zenless.GetFlag = function(_, name) return Flags[name] end
@@ -7109,6 +7926,34 @@ applyV6PublicAPI = function(Zenless)
 	Zenless.DetachTab = detachTab
 	Zenless.ToggleFavorite = toggleFavorite
 	Zenless.ShowTabContextMenu = showTabContextMenu
+	Zenless.CreateFOVOverlay = function(_, o) return createFOVOverlay(o) end
+	Zenless.CreateFOV = function(_, o) return createFOVOverlay(o) end
+	Zenless.SetControl = function(_, flag, value, silent) return setControlByFlag(flag, value, silent) end
+	Zenless.GetControl = function(_, flag)
+		local api = State.controlRegistry[flag]
+		if api and api.Get then return api.Get() end
+		return ConfigData.values[flag]
+	end
+	Zenless.ApplyControls = function(_, map, silent) return applyControlsMap(map, silent) end
+	Zenless.BindLive = function(_, interval, fn)
+		if type(interval) == "function" then
+			return bindLive(0.25, interval)
+		end
+		return bindLive(interval, fn)
+	end
+	Zenless.OnUnload = function(_, fn)
+		if type(fn) ~= "function" then return end
+		table.insert(State.unloadHooks, fn)
+		return function()
+			for i = #State.unloadHooks, 1, -1 do
+				if State.unloadHooks[i] == fn then
+					table.remove(State.unloadHooks, i)
+					break
+				end
+			end
+		end
+	end
+	Zenless.GetControls = function() return State.controlRegistry end
 	Zenless.Undo = function()
 		local e = table.remove(State.undoStack)
 		if e then table.insert(State.redoStack, e); return e end
@@ -7768,6 +8613,44 @@ function Zenless:Unload()
 	end)
 end
 
+function Zenless:OnUnload(fn)
+	if type(fn) ~= "function" then return end
+	table.insert(State.unloadHooks, fn)
+	return function()
+		for i = #State.unloadHooks, 1, -1 do
+			if State.unloadHooks[i] == fn then
+				table.remove(State.unloadHooks, i)
+				break
+			end
+		end
+	end
+end
+
+function Zenless:CreateFOVOverlay(opts)
+	return createFOVOverlay(opts)
+end
+
+function Zenless:SetControl(flag, value, silent)
+	return setControlByFlag(flag, value, silent)
+end
+
+function Zenless:ApplyControls(map, silent)
+	return applyControlsMap(map, silent)
+end
+
+function Zenless:BindLive(interval, fn)
+	if type(interval) == "function" then
+		return bindLive(0.25, interval)
+	end
+	return bindLive(interval, fn)
+end
+
+function Zenless:GetControl(flag)
+	local api = State.controlRegistry[flag]
+	if api and api.Get then return api.Get() end
+	return ConfigData.values[flag]
+end
+
 Zenless.Window = {
 	TitleLabel = titleLabel,
 	Destroy = destroyGui,
@@ -8056,7 +8939,7 @@ homeTab:AddParagraph("ZENLESS",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v5.1", "ZENLESS", "Library", "Silver" })
+homeTab:AddBadgeRow({ "v6.2", "ZENLESS", "Library", "Silver" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
