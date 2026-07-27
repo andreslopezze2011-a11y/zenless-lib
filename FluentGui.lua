@@ -103,8 +103,8 @@ local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
 	DisableParticles = false,
-	DisableGrid = false,
-	DisableDust = false,
+	DisableGrid = true, -- lighter boot (KRNL-safe); set false for grid texture
+	DisableDust = true, -- lighter boot; set false for dust particles
 	LazyTabs = false,
 	HighContrast = false,
 	Monochrome = false,
@@ -1393,7 +1393,7 @@ local windowRim = attachPerimeterLight(window, {
 local playLoader
 local loaderHost -- outer so skip/destroy can clear the ghost rim
 (function()
-local LOADER_SECONDS = 10
+local LOADER_SECONDS = 2.4
 local loaderFinished = false
 
 loaderHost = make("Frame", {
@@ -1572,12 +1572,12 @@ make("UIGradient", {
 task.spawn(function()
 	while loaderTopShine.Parent do
 		loaderTopShine.Position = UDim2.new(-0.3, 0, 0, 0)
-		local tw = TweenService:Create(loaderTopShine, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-			Position = UDim2.new(1.05, 0, 0, 0),
-		})
-		tw:Play()
-		tw.Completed:Wait()
-		task.wait(0.4)
+		pcall(function()
+			TweenService:Create(loaderTopShine, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Position = UDim2.new(1.05, 0, 0, 0),
+			}):Play()
+		end)
+		task.wait(2.2)
 	end
 end)
 
@@ -1828,12 +1828,12 @@ playLoader = function()
 	task.spawn(function()
 		while loaderFillShine.Parent and not loaderFinished do
 			loaderFillShine.Position = UDim2.new(-0.45, 0, 0, 0)
-			local tw = TweenService:Create(loaderFillShine, TweenInfo.new(0.85, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				Position = UDim2.new(1.1, 0, 0, 0),
-			})
-			tw:Play()
-			tw.Completed:Wait()
-			task.wait(0.2)
+			pcall(function()
+				TweenService:Create(loaderFillShine, TweenInfo.new(0.85, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+					Position = UDim2.new(1.1, 0, 0, 0),
+				}):Play()
+			end)
+			task.wait(1.05)
 		end
 	end)
 
@@ -9036,7 +9036,11 @@ local function runKeySystem(opts)
 	end)
 
 	while not finished and screenGui and screenGui.Parent do
-		task.wait()
+		-- Heartbeat yield (more reliable than bare task.wait on some executors)
+		pcall(function()
+			RunService.Heartbeat:Wait()
+		end)
+		task.wait(0.03)
 	end
 
 	return unlocked
