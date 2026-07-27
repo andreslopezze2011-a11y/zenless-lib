@@ -1,30 +1,30 @@
 --[[
-	ZENLESS v7.1 — Premium ScriptHub GUI Library (black / grey / silver / champagne)
+	ZENLESS v7.2 — ScriptHub GUI Library (black / grey / silver)
 
-	Load:
-		local Zenless = loadstring(readfile("FluentGui.lua"))()
+	GitHub:
+		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
 
-	ScriptHub boot:
+	Load (executor):
 		getgenv().ZENLESS_DEFER_BOOT = true
-		local Zenless = loadstring(readfile("FluentGui.lua"))()
-		local ok = Zenless:Boot({
+		local Zenless = loadstring(game:HttpGet("https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua"))()
+		-- or: loadstring(readfile("FluentGui.lua"))()
+
+	Boot ScriptHub:
+		Zenless:Boot({
 			KeySystem = {
 				Title = "ZENLESS",
 				Subtitle = "ScriptHub Access",
-				Keys = { "STANDARD-KEY" },
-				PremiumKeys = { "VIP-ACCESS", "PREMIUM-ZENLESS" },
+				Keys = { "12345678", "ZENLESS-HUB" },
+				PremiumKeys = { "VIP-ACCESS", "PREMIUM-ZENLESS", "ZENLESS-PRO" },
 				SaveKey = true,
 				KeyLink = "https://discord.gg/",
-				Attempts = 5,
 			},
 			Loader = true,
 		})
-		if not ok then return end
-		-- Zenless:IsPremium() / Zenless:GetLicenseTier() after Boot
 		local Window = Zenless:CreateWindow({ Title = "ZENLESS ScriptHub" })
 
-	v7.1: PremiumKeys elevate UI (sections, buttons, toasts, chrome, motion).
-	v7.0: KeySystem, ScriptHub boot, lock FOV, snappy tabs, full widget suite.
+	v7.2: safer KRNL boot, fixed demo return, lighter load, cleaner PremiumKeys.
+	v7.1: Premium key tiers + refined premium chrome.
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -43,7 +43,7 @@ if not player then
 	player = Players.LocalPlayer
 end
 
-local LIBRARY_VERSION = "7.1"
+local LIBRARY_VERSION = "7.2"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "zenless_config.json"
 local SNAP_PX = 20
@@ -102,9 +102,9 @@ local Anim = {
 local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
-	DisableParticles = false,
-	DisableGrid = true, -- lighter boot (KRNL-safe); set false for grid texture
-	DisableDust = true, -- lighter boot; set false for dust particles
+	DisableParticles = true, -- KRNL-safe boot; enable later via SetFlag
+	DisableGrid = true,
+	DisableDust = true,
 	LazyTabs = false,
 	HighContrast = false,
 	Monochrome = false,
@@ -306,8 +306,19 @@ local function loadConfigFile()
 	ConfigData.recentColors = ConfigData.recentColors or {}
 	ConfigData.profiles = ConfigData.profiles or {}
 	ConfigData.achievements = ConfigData.achievements or {}
+	-- Never let saved config re-enable heavy boot FX (KRNL timeout risk)
+	local protect = {
+		DisableGrid = true,
+		DisableDust = true,
+		DisableParticles = true,
+	}
 	for k, v in pairs(ConfigData.flags) do
-		if Flags[k] ~= nil then Flags[k] = v end
+		if Flags[k] ~= nil and protect[k] == nil then
+			Flags[k] = v
+		end
+	end
+	for k, v in pairs(protect) do
+		Flags[k] = v
 	end
 	return true
 end
@@ -1309,7 +1320,11 @@ local dustHolder = make("Frame", {
 	ZIndex = 0,
 }, { corner(10) })
 dustHolder.Parent = window
-floatingDust(dustHolder, 12)
+-- Dust deferred so library return is fast on KRNL
+task.defer(function()
+	if Flags.DisableDust or not dustHolder or not dustHolder.Parent then return end
+	floatingDust(dustHolder, 8)
+end)
 
 -- Subtle mouse parallax on bg sheen gradient only (not a wash overlay)
 RunService.RenderStepped:Connect(function()
@@ -8291,20 +8306,33 @@ local function runKeySystem(opts)
 
 	local function httpGet(url)
 		if type(url) ~= "string" or url == "" then return nil end
-		local ok, body = pcall(function()
-			if game and game.HttpGet then
-				return game:HttpGet(url)
-			end
-			local reqFn = (typeof(http_request) == "function" and http_request)
-				or (typeof(request) == "function" and request)
-				or (syn and syn.request)
-			if reqFn then
-				local res = reqFn({ Url = url, Method = "GET" })
-				return res and (res.Body or res.body)
-			end
-			return nil
+		local reqFns = {}
+		pcall(function()
+			if typeof(http_request) == "function" then table.insert(reqFns, http_request) end
 		end)
-		if ok then return body end
+		pcall(function()
+			if typeof(request) == "function" then table.insert(reqFns, request) end
+		end)
+		pcall(function()
+			if syn and typeof(syn.request) == "function" then table.insert(reqFns, syn.request) end
+		end)
+		for _, reqFn in ipairs(reqFns) do
+			local ok, res = pcall(reqFn, {
+				Url = url,
+				Method = "GET",
+				Headers = { ["User-Agent"] = "Mozilla/5.0" },
+			})
+			if ok and type(res) == "table" then
+				local body = res.Body or res.body
+				if type(body) == "string" and #body > 0 then return body end
+			elseif ok and type(res) == "string" and #res > 0 then
+				return res
+			end
+		end
+		local ok1, body1 = pcall(function() return game:HttpGet(url) end)
+		if ok1 and type(body1) == "string" then return body1 end
+		local ok2, body2 = pcall(function() return game.HttpGet(game, url) end)
+		if ok2 and type(body2) == "string" then return body2 end
 		return nil
 	end
 
@@ -8335,13 +8363,25 @@ local function runKeySystem(opts)
 		end)
 	end
 	if type(opts.OnlineKey) == "string" then
-		local body = httpGet(opts.OnlineKey)
+		-- Timed fetch so a hung CDN cannot freeze Boot/KeySystem on KRNL
+		local done, body = false, nil
+		task.spawn(function()
+			body = httpGet(opts.OnlineKey)
+			done = true
+		end)
+		local t0 = os.clock()
+		while not done and (os.clock() - t0) < 2.5 do
+			task.wait(0.05)
+		end
 		if type(body) == "string" then
 			for line in string.gmatch(body, "[^\r\n]+") do
 				local trimmed = string.gsub(line, "^%s+", "")
 				trimmed = string.gsub(trimmed, "%s+$", "")
 				if trimmed ~= "" and not string.find(trimmed, "^#") and not string.find(trimmed, "^%-%-") then
-					local isPrem = string.find(string.upper(trimmed), "PREMIUM") or string.find(string.upper(trimmed), "^VIP") or string.find(string.upper(trimmed), "^PRO%-")
+					local upper = string.upper(trimmed)
+					local isPrem = string.find(upper, "PREMIUM", 1, true)
+						or string.find(upper, "^VIP")
+						or string.find(upper, "^PRO%-")
 					addKey(trimmed, isPrem and true or false)
 				end
 			end
@@ -9225,7 +9265,12 @@ function Zenless:Boot(opts)
 		if windowRim then windowRim.Visible = false end
 	end)
 
-	local keyOpts = opts.KeySettings or (type(opts.KeySystem) == "table" and opts.KeySystem) or nil
+	local keyOpts = opts.KeySettings
+	if type(opts.KeySystem) == "table" then
+		keyOpts = opts.KeySystem
+	elseif opts.KeySystem == true and type(opts.KeySettings) == "table" then
+		keyOpts = opts.KeySettings
+	end
 	if keyOpts then
 		-- Don't open GUI yet — loader runs next
 		keyOpts.SkipShow = true
