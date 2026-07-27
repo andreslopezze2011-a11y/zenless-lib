@@ -9577,5 +9577,6 @@ Zenless:Notify({
 	Duration = 3,
 })
 
-return Zenless
 end)()
+
+return Zenless
