@@ -1,5 +1,5 @@
 --[[
-	ZENLESS v0.0.1 — ScriptHubLibrary
+	ZENLESS v7.1 — Premium ScriptHub GUI Library (black / grey / silver / champagne)
 
 	Load:
 		local Zenless = loadstring(readfile("FluentGui.lua"))()
@@ -203,10 +203,11 @@ local function debounced(fn, ms)
 	return function(...)
 		token = token + 1
 		local my = token
-		local args = table.pack(...)
+		local args = { n = select("#", ...), ... }
 		task.delay(ms / 1000, function()
 			if my == token then
-				safeCall(fn, table.unpack(args, 1, args.n))
+				local u = table.unpack or unpack
+				safeCall(fn, u(args, 1, args.n))
 			end
 		end)
 	end
@@ -974,36 +975,13 @@ local function decorateButton(btn, opts)
 	local hovering = false
 	local pressing = false
 	local premiumFeel = State.premium == true
-	local hoverScale = premiumFeel and 1.04 or 1.02
-	local pressScale = premiumFeel and 0.955 or 0.965
-
-	-- Premium soft/ghost buttons also get a light shine sweep
-	if premiumFeel and not shine then
-		shine = make("Frame", {
-			Name = "Shine",
-			Size = UDim2.new(0.4, 0, 1.35, 0),
-			Position = UDim2.new(-0.55, 0, 0.5, 0),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			BackgroundTransparency = 0.88,
-			BorderSizePixel = 0,
-			Rotation = 18,
-			ZIndex = 3,
-		})
-		shine.Parent = btn
-		make("UIGradient", {
-			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 1),
-				NumberSequenceKeypoint.new(0.5, 0.45),
-				NumberSequenceKeypoint.new(1, 1),
-			}),
-		}).Parent = shine
-	end
+	local hoverScale = premiumFeel and 1.028 or 1.02
+	local pressScale = premiumFeel and 0.96 or 0.965
 
 	local function playShine()
 		if not shine or Flags.NoAnimations then return end
 		shine.Position = UDim2.new(-0.55, 0, 0.5, 0)
-		shine.BackgroundTransparency = premiumFeel and 0.72 or 0.78
+		shine.BackgroundTransparency = 0.78
 		tween(shine, Anim.Shine, {
 			Position = UDim2.new(1.55, 0, 0.5, 0),
 			BackgroundTransparency = 1,
@@ -1021,7 +999,7 @@ local function decorateButton(btn, opts)
 		if strokeObj then
 			tween(strokeObj, Anim.Fast, {
 				Color = primary and Color3.new(1, 1, 1) or Theme.Accent,
-				Transparency = primary and (premiumFeel and 0.22 or 0.35) or (premiumFeel and 0.18 or 0.28),
+				Transparency = primary and 0.35 or (premiumFeel and 0.24 or 0.28),
 			})
 		end
 		playShine()
@@ -1046,11 +1024,6 @@ local function decorateButton(btn, opts)
 		pressing = true
 		tween(scale, Anim.Press, { Scale = pressScale })
 		tween(btn, Anim.Press, { BackgroundColor3 = pressColor })
-		if premiumFeel then
-			pcall(function()
-				clickRipple(btn, btn.AbsoluteSize.X * 0.5, btn.AbsoluteSize.Y * 0.5, Theme.Accent)
-			end)
-		end
 	end)
 	btn.MouseButton1Up:Connect(function()
 		pressing = false
@@ -1079,20 +1052,15 @@ local function celebrateOpen(win)
 	local w, h = win.AbsoluteSize.X, win.AbsoluteSize.Y
 	local premium = State.premium == true
 	local bursts = {
-		{ w * 0.5, h * 0.08, premium and 20 or 14 },
-		{ w * 0.12, h * 0.35, premium and 14 or 10 },
-		{ w * 0.88, h * 0.35, premium and 14 or 10 },
-		{ w * 0.5, h * 0.55, premium and 22 or 16 },
-		{ w * 0.25, h * 0.75, premium and 12 or 8 },
-		{ w * 0.75, h * 0.75, premium and 12 or 8 },
+		{ w * 0.5, h * 0.08, premium and 16 or 14 },
+		{ w * 0.12, h * 0.35, premium and 11 or 10 },
+		{ w * 0.88, h * 0.35, premium and 11 or 10 },
+		{ w * 0.5, h * 0.55, premium and 18 or 16 },
+		{ w * 0.25, h * 0.75, 8 },
+		{ w * 0.75, h * 0.75, 8 },
 	}
-	if premium then
-		table.insert(bursts, { w * 0.35, h * 0.22, 10 })
-		table.insert(bursts, { w * 0.65, h * 0.22, 10 })
-		table.insert(bursts, { w * 0.5, h * 0.9, 14 })
-	end
 	for i, b in ipairs(bursts) do
-		task.delay(i * (premium and 0.045 or 0.06), function()
+		task.delay(i * 0.06, function()
 			if win.Parent then
 				sparkBurst(win, b[1], b[2], Theme.Accent, b[3])
 			end
@@ -1905,7 +1873,10 @@ playLoader = function()
 	loaderPct.Text = "100%"
 	loaderDetail.Text = "2450 KB / 2450 KB"
 	loaderSub.Text = "ready"
-	loaderBadge:FindFirstChildOfClass("TextLabel").Text = "READY"
+	pcall(function()
+		local lbl = loaderBadge and loaderBadge:FindFirstChildOfClass("TextLabel")
+		if lbl then lbl.Text = "READY" end
+	end)
 	task.wait(0.45)
 
 	tween(loaderCard, Anim.Smooth, { GroupTransparency = 1 })
@@ -2796,8 +2767,7 @@ notify = function(title, body, kind, duration, opts)
 	})
 	wrapper.Parent = notifArea
 
-	local toastStroke = stroke(State.premium and Theme.Accent or Theme.Stroke, State.premium and 1.2 or 1, State.premium and 0.28 or 0.3)
-	if State.premium then registerAccent(toastStroke, "Color") end
+	local toastStroke = stroke(Theme.Stroke, 1, State.premium and 0.28 or 0.3)
 	local toast = make("CanvasGroup", {
 		Name = "Toast",
 		Size = UDim2.new(1, 0, 0, toastH),
@@ -2806,10 +2776,10 @@ notify = function(title, body, kind, duration, opts)
 		BorderSizePixel = 0,
 		GroupTransparency = 1,
 		ZIndex = 91,
-	}, { corner(State.premium and 12 or 10), toastStroke })
+	}, { corner(10), toastStroke })
 	toast.Parent = wrapper
 
-	local uiScale = make("UIScale", { Scale = State.premium and 0.92 or 0.96 })
+	local uiScale = make("UIScale", { Scale = 0.96 })
 	uiScale.Parent = toast
 
 	-- Surface
@@ -2819,14 +2789,10 @@ notify = function(title, body, kind, duration, opts)
 		BorderSizePixel = 0,
 		ZIndex = 1,
 	}, {
-		corner(State.premium and 12 or 10),
+		corner(10),
 		make("UIGradient", {
 			Rotation = 115,
-			Color = ColorSequence.new(State.premium and {
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(52, 46, 34)),
-				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(26, 24, 20)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 14, 16)),
-			} or {
+			Color = ColorSequence.new({
 				ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 40, 46)),
 				ColorSequenceKeypoint.new(0.5, Color3.fromRGB(22, 22, 26)),
 				ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 14, 16)),
@@ -2834,27 +2800,9 @@ notify = function(title, body, kind, duration, opts)
 		}),
 	}).Parent = toast
 
-	if State.premium then
-		local tip = make("Frame", {
-			Size = UDim2.new(1, 0, 0, 2),
-			BackgroundColor3 = Theme.Accent,
-			BorderSizePixel = 0,
-			ZIndex = 4,
-		})
-		tip.Parent = toast
-		registerAccent(tip, "BackgroundColor3")
-		make("UIGradient", {
-			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0.55),
-				NumberSequenceKeypoint.new(0.5, 0),
-				NumberSequenceKeypoint.new(1, 0.55),
-			}),
-		}).Parent = tip
-	end
-
 	-- Status rail
 	make("Frame", {
-		Size = UDim2.new(0, State.premium and 4 or 3, 1, -12),
+		Size = UDim2.new(0, 3, 1, -12),
 		Position = UDim2.fromOffset(0, 6),
 		BackgroundColor3 = color,
 		BorderSizePixel = 0,
@@ -3140,23 +3088,23 @@ local function switchTab(tab)
 		local old = prev.Page
 		tween(old, Anim.Fast, {
 			GroupTransparency = 1,
-			Position = UDim2.fromOffset(premTab and -14 or -8, premTab and 10 or 6),
+			Position = UDim2.fromOffset(premTab and -10 or -8, premTab and 7 or 6),
 		})
-		task.delay(premTab and 0.1 or 0.12, function()
+		task.delay(0.12, function()
 			if activeTab ~= prev then old.Visible = false end
 		end)
 	end
 
 	local page = tab.Page
 	page.Visible = true
-	page.Position = UDim2.fromOffset(premTab and 22 or 14, premTab and 12 or 8)
+	page.Position = UDim2.fromOffset(premTab and 16 or 14, premTab and 9 or 8)
 	page.GroupTransparency = 1
 	local pageScale = page:FindFirstChild("PageScale")
 	if not pageScale then
-		pageScale = make("UIScale", { Name = "PageScale", Scale = premTab and 0.97 or 0.985 })
+		pageScale = make("UIScale", { Name = "PageScale", Scale = 0.985 })
 		pageScale.Parent = page
 	else
-		pageScale.Scale = premTab and 0.97 or 0.985
+		pageScale.Scale = 0.985
 	end
 	tween(page, Anim.Smooth, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
 	tween(pageScale, Anim.Spring, { Scale = 1 })
@@ -3344,6 +3292,7 @@ local function createTab(nameOrConfig)
 end
 
 -- ============ CONTROLS ============
+local showConfirmModal -- assigned later (confirm modal)
 local order = 0
 local function nextOrder()
 	order = order + 1
@@ -3352,7 +3301,7 @@ end
 
 local function styleCard(holder)
 	local premium = State.premium == true
-	local s = stroke(premium and Theme.Accent or Theme.Stroke, premium and 1.15 or 1, premium and 0.42 or 0.4)
+	local s = stroke(premium and Theme.Accent or Theme.Stroke, 1, premium and 0.36 or 0.4)
 	s.Parent = holder
 	if premium then registerAccent(s, "Color") end
 	cardLit().Parent = holder
@@ -3361,27 +3310,6 @@ local function styleCard(holder)
 	if not scale then
 		scale = make("UIScale", { Scale = 1 })
 		scale.Parent = holder
-	end
-	if premium and not holder:FindFirstChild("PremiumSheen") then
-		local sheen = make("Frame", {
-			Name = "PremiumSheen",
-			Size = UDim2.new(0.35, 0, 1.2, 0),
-			Position = UDim2.new(-0.4, 0, 0.5, 0),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			BackgroundTransparency = 0.92,
-			BorderSizePixel = 0,
-			Rotation = 16,
-			ZIndex = 0,
-		})
-		sheen.Parent = holder
-		task.defer(function()
-			if not sheen.Parent or Flags.NoAnimations then return end
-			tween(sheen, Anim.Shine, {
-				Position = UDim2.new(1.4, 0, 0.5, 0),
-				BackgroundTransparency = 1,
-			})
-		end)
 	end
 	return s, scale
 end
@@ -3393,11 +3321,11 @@ local function hoverCard(holder, cardStroke, cardScale)
 		if cardStroke then
 			tween(cardStroke, Anim.Soft, {
 				Color = Theme.Accent,
-				Transparency = prem and 0.22 or 0.32,
+				Transparency = prem and 0.28 or 0.32,
 			})
 		end
 		if cardScale then
-			tween(cardScale, Anim.Soft, { Scale = prem and 1.028 or 1.018 })
+			tween(cardScale, Anim.Soft, { Scale = prem and 1.022 or 1.018 })
 		end
 	end)
 	holder.MouseLeave:Connect(function()
@@ -3406,7 +3334,7 @@ local function hoverCard(holder, cardStroke, cardScale)
 		if cardStroke then
 			tween(cardStroke, Anim.Soft, {
 				Color = prem and Theme.Accent or Theme.Stroke,
-				Transparency = prem and 0.42 or 0.4,
+				Transparency = prem and 0.36 or 0.4,
 			})
 		end
 		if cardScale then
@@ -3418,7 +3346,7 @@ end
 local function createLabel(tab, text)
 	local premium = State.premium == true
 	local row = make("Frame", {
-		Size = UDim2.new(1, 0, 0, premium and 28 or 24),
+		Size = UDim2.new(1, 0, 0, premium and 26 or 24),
 		BackgroundTransparency = 1,
 		LayoutOrder = nextOrder(),
 	})
@@ -3426,50 +3354,21 @@ local function createLabel(tab, text)
 	row:SetAttribute("ZenlessSection", true)
 
 	local tick = make("Frame", {
-		Size = UDim2.fromOffset(premium and 4 or 3, premium and 14 or 11),
+		Size = UDim2.fromOffset(premium and 3 or 3, premium and 12 or 11),
 		Position = UDim2.fromOffset(0, premium and 7 or 8),
 		BackgroundColor3 = Theme.Accent,
 		BorderSizePixel = 0,
 		ZIndex = 2,
-	}, { corner(premium and 2 or 1) })
+	}, { corner(1) })
 	tick.Parent = row
 	registerAccent(tick, "BackgroundColor3")
 
-	if premium then
-		local glow = make("Frame", {
-			Size = UDim2.fromOffset(10, 18),
-			Position = UDim2.fromOffset(-3, 5),
-			BackgroundColor3 = Theme.Accent,
-			BackgroundTransparency = 0.78,
-			BorderSizePixel = 0,
-			ZIndex = 1,
-		}, { corner(4) })
-		glow.Parent = row
-		registerAccent(glow, "BackgroundColor3")
-
-		local line = make("Frame", {
-			Size = UDim2.new(1, -14, 0, 1),
-			Position = UDim2.new(0, 14, 1, -2),
-			BackgroundColor3 = Theme.Accent,
-			BackgroundTransparency = 0.72,
-			BorderSizePixel = 0,
-		})
-		line.Parent = row
-		registerAccent(line, "BackgroundColor3")
-		make("UIGradient", {
-			Transparency = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0),
-				NumberSequenceKeypoint.new(1, 1),
-			}),
-		}).Parent = line
-	end
-
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -14, 1, premium and -4 or 0),
-		Position = UDim2.fromOffset(premium and 12 or 10, 0),
+		Size = UDim2.new(1, -14, 1, 0),
+		Position = UDim2.fromOffset(10, 0),
 		Font = Enum.Font.GothamBold,
-		Text = premium and ("·  " .. tostring(text)) or text,
+		Text = text,
 		TextSize = premium and 12 or 11,
 		TextColor3 = premium and Theme.Accent or Theme.SubText,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -3570,28 +3469,21 @@ local function createButton(tab, text, callback, primary, opts)
 		textColor = Theme.SubText
 	end
 
-	local rowH = Flags.LargeHitboxes and 46 or (State.premium and 42 or 40)
+	local rowH = Flags.LargeHitboxes and 46 or 40
 	local btn = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = baseColor,
 		Text = "",
 		Font = State.uiFont,
-		TextSize = State.premium and 13 or 13,
+		TextSize = 13,
 		TextColor3 = textColor,
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
 		ClipsDescendants = true,
-	}, { corner(State.premium and 10 or 9) })
+	}, { corner(9) })
 	btn.Parent = tab.Container
 	btn:SetAttribute("ZenlessTitle", text)
 	table.insert(State.focusables, btn)
-
-	if State.premium and (isPrimary or isDanger) then
-		-- Extra outer glow stroke for premium CTAs
-		local glowStroke = stroke(isDanger and Theme.Error or Theme.Accent, 2, 0.55)
-		glowStroke.Parent = btn
-		if isPrimary then registerAccent(glowStroke, "Color") end
-	end
 
 	if isPrimary then
 		registerAccent(btn, "BackgroundColor3")
@@ -4685,29 +4577,30 @@ local function setAccent(color)
 	end
 end
 
--- Premium champagne gold (not purple / not terracotta)
-local PREMIUM_ACCENT = Color3.fromRGB(222, 190, 118)
+-- Soft warm silver (premium reads cleaner than standard, not flashy gold)
+local PREMIUM_ACCENT = Color3.fromRGB(214, 204, 168)
 local STANDARD_ACCENT = Color3.fromRGB(198, 198, 208)
+local Zenless -- forward declare for applyPremiumMode sync
 
 local function ensurePremiumBadge()
 	if State.premiumBadge and State.premiumBadge.Parent then return State.premiumBadge end
 	local badge = make("Frame", {
 		Name = "PremiumBadge",
-		Size = UDim2.fromOffset(64, 18),
+		Size = UDim2.fromOffset(58, 16),
 		Position = UDim2.new(0, 148, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundColor3 = PREMIUM_ACCENT,
-		BackgroundTransparency = 0.82,
+		BackgroundTransparency = 0.88,
 		Visible = false,
 		ZIndex = 5,
-	}, { corner(5), stroke(PREMIUM_ACCENT, 1, 0.35) })
+	}, { corner(4), stroke(PREMIUM_ACCENT, 1, 0.5) })
 	badge.Parent = titleBar
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
 		Font = Enum.Font.GothamBold,
 		Text = "PREMIUM",
-		TextSize = 9,
+		TextSize = 8,
 		TextColor3 = PREMIUM_ACCENT,
 		ZIndex = 6,
 	}).Parent = badge
@@ -4721,87 +4614,40 @@ local function applyPremiumMode(on, opts)
 	State.premium = on
 	Flags.PremiumMode = on
 	State.licenseTier = on and "premium" or (opts.tier or "standard")
-	pcall(function()
-		if Zenless then Zenless.Premium = on end
-	end)
+	if type(Zenless) == "table" then
+		Zenless.Premium = on
+	end
 
 	local badge = ensurePremiumBadge()
 	badge.Visible = on
 
 	if on then
 		setAccent(opts.Accent or PREMIUM_ACCENT)
-		pcall(function()
-			if setFlag then setFlag("RainbowBorder", true) end
-		end)
-		-- Snappier premium motion
-		Anim.Fast = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		Anim.Smooth = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-		Anim.Spring = TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-		Anim.Soft = TweenInfo.new(0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-		Anim.Shine = TweenInfo.new(0.42, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		pcall(function()
-			if softPulse then softPulse(badge, "BackgroundTransparency", 0.72, 0.88, 1.6) end
-		end)
-		pcall(function()
-			if titleLabel then
-				local base = string.gsub(titleLabel.Text, "%s*·%s*PREMIUM", "")
-				if not string.find(base, "ScriptHub") then
-					titleLabel.Text = base
-				end
-			end
-		end)
-		pcall(function()
-			if celebrateOpen and window then
-				task.defer(function() celebrateOpen(window) end)
-			end
-		end)
-		-- Soft premium wash on window
+		-- Slightly snappier motion (subtle)
+		Anim.Fast = TweenInfo.new(0.11, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		Anim.Smooth = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+		Anim.Soft = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+		Anim.Shine = TweenInfo.new(0.48, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		-- Thin accent line at top of window
 		pcall(function()
 			if not window:FindFirstChild("PremiumWash") then
 				local wash = make("Frame", {
 					Name = "PremiumWash",
-					Size = UDim2.new(1, 0, 0, 3),
+					Size = UDim2.new(1, 0, 0, 2),
 					BackgroundColor3 = PREMIUM_ACCENT,
 					BorderSizePixel = 0,
 					ZIndex = 50,
 				})
 				wash.Parent = window
 				registerAccent(wash, "BackgroundColor3")
-				make("UIGradient", {
-					Transparency = NumberSequence.new({
-						NumberSequenceKeypoint.new(0, 0.2),
-						NumberSequenceKeypoint.new(0.5, 0),
-						NumberSequenceKeypoint.new(1, 0.2),
-					}),
-				}).Parent = wash
 			end
-			if not window:FindFirstChild("PremiumAura") then
-				local aura = make("Frame", {
-					Name = "PremiumAura",
-					Size = UDim2.new(1, 0, 0, 72),
-					BackgroundColor3 = PREMIUM_ACCENT,
-					BackgroundTransparency = 0.94,
-					BorderSizePixel = 0,
-					ZIndex = 0,
-				})
-				aura.Parent = window
-				make("UIGradient", {
-					Rotation = 90,
-					Transparency = NumberSequence.new({
-						NumberSequenceKeypoint.new(0, 0.35),
-						NumberSequenceKeypoint.new(1, 1),
-					}),
-				}).Parent = aura
-			end
+			local aura = window:FindFirstChild("PremiumAura")
+			if aura then aura:Destroy() end
 		end)
 	else
 		setAccent((DarkThemeBackup and DarkThemeBackup.Accent) or STANDARD_ACCENT)
-		pcall(function()
-			if setFlag then setFlag("RainbowBorder", false) end
-		end)
 		Anim.Fast = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		Anim.Smooth = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-		Anim.Spring = TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 		Anim.Soft = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		Anim.Shine = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		pcall(function()
@@ -6161,7 +6007,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 -- ============ V6 MEGA CHUNK ============
-local showConfirmModal, enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
+local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
 (function()
 -- ============ ZENLESS V6 CHUNK (splice into FluentGui.lua, same scope) ============
@@ -8214,8 +8060,16 @@ applyV6PublicAPI = function(Zenless)
 	Zenless.Flags = Flags
 	Zenless.IsPremium = function() return State.premium == true end
 	Zenless.GetLicenseTier = function() return State.licenseTier end
-	Zenless.ApplyPremium = function(_, on, o) return applyPremiumMode(on, o) end
-	Zenless.SetPremium = function(_, on, o) return applyPremiumMode(on, o) end
+	Zenless.ApplyPremium = function(self, on, o)
+		local r = applyPremiumMode(on, o)
+		if type(self) == "table" then self.Premium = State.premium end
+		return r
+	end
+	Zenless.SetPremium = function(self, on, o)
+		local r = applyPremiumMode(on, o)
+		if type(self) == "table" then self.Premium = State.premium end
+		return r
+	end
 	Zenless.SetFlag = function(_, name, value) return setFlag(name, value) end
 	Zenless.GetFlag = function(_, name) return Flags[name] end
 	Zenless.SaveConfig = function() return saveConfigFile() end
@@ -9000,7 +8854,7 @@ local function runKeySystem(opts)
 			pcall(function()
 				if notify then
 					local msg = tier == "premium"
-						and "Premium ScriptHub unlocked — elevated UI active."
+						and "Premium license unlocked."
 						or (skipShow and "Booting ScriptHub…" or ("Welcome to " .. title))
 					notify(tier == "premium" and "Premium access" or "Access granted", msg, "success", 2.6)
 				end
@@ -9189,7 +9043,7 @@ local function runKeySystem(opts)
 end
 
 -- ============ PUBLIC LIBRARY ============
-local Zenless = {
+Zenless = {
 	Name = "ZENLESS",
 	Version = LIBRARY_VERSION,
 	Theme = Theme,
