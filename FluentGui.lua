@@ -84,17 +84,18 @@ local function registerText(obj)
 end
 
 local Anim = {
-	Fast   = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Smooth = TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Spring = TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-	Snap   = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Fast   = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Smooth = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Spring = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Snap   = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	Linear = TweenInfo.new(0.2, Enum.EasingStyle.Linear),
-	Sidebar = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Minimize = TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Press  = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Release = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-	Shine  = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Soft   = TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Sidebar = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Minimize = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Press  = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Release = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Shine  = TweenInfo.new(0.58, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Soft   = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Nav    = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 -- ============ V6 FLAGS / SERVICES ============
@@ -1007,9 +1008,9 @@ local function decorateButton(btn, opts)
 		})
 		tween(scale, Anim.Soft, { Scale = hoverScale })
 		if strokeObj then
-			tween(strokeObj, Anim.Fast, {
+			tween(strokeObj, Anim.Soft, {
 				Color = primary and Color3.new(1, 1, 1) or Theme.Accent,
-				Transparency = primary and 0.35 or (premiumFeel and 0.24 or 0.28),
+				Transparency = primary and 0.4 or (premiumFeel and 0.3 or 0.34),
 			})
 		end
 		playShine()
@@ -1021,9 +1022,9 @@ local function decorateButton(btn, opts)
 			BackgroundColor3 = baseColor,
 			BackgroundTransparency = idleTransparency,
 		})
-		tween(scale, Anim.Release, { Scale = 1 })
+		tween(scale, Anim.Soft, { Scale = 1 })
 		if strokeObj then
-			tween(strokeObj, Anim.Fast, {
+			tween(strokeObj, Anim.Soft, {
 				Color = primary and Color3.new(1, 1, 1) or Theme.Stroke,
 				Transparency = primary and 0.55 or 0.42,
 			})
@@ -1933,10 +1934,10 @@ registerAccent(accentDot, "BackgroundColor3")
 
 -- Soft glow behind accent dot
 local dotGlow = make("Frame", {
-	Size = UDim2.fromOffset(16, 16),
-	Position = UDim2.fromOffset(14, 16),
+	Size = UDim2.fromOffset(15, 15),
+	Position = UDim2.fromOffset(14.5, 16.5),
 	BackgroundColor3 = Theme.Accent,
-	BackgroundTransparency = 0.75,
+	BackgroundTransparency = 0.9,
 	ZIndex = 2,
 }, { corner(8) })
 dotGlow.Parent = titleBar
@@ -2055,15 +2056,15 @@ end)
 
 -- Accent dot pulse
 task.spawn(function()
-	local pulse = TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local pulse = TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	while accentDot.Parent do
-		tween(accentDot, pulse, { BackgroundTransparency = 0.45 })
-		tween(dotGlow, pulse, { BackgroundTransparency = 0.88, Size = UDim2.fromOffset(20, 20), Position = UDim2.fromOffset(12, 14) })
-		task.wait(1.1)
+		tween(accentDot, pulse, { BackgroundTransparency = 0.35 })
+		tween(dotGlow, pulse, { BackgroundTransparency = 0.94, Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(13, 15) })
+		task.wait(1.4)
 		if not accentDot.Parent then break end
 		tween(accentDot, pulse, { BackgroundTransparency = 0 })
-		tween(dotGlow, pulse, { BackgroundTransparency = 0.72, Size = UDim2.fromOffset(16, 16), Position = UDim2.fromOffset(14, 16) })
-		task.wait(1.1)
+		tween(dotGlow, pulse, { BackgroundTransparency = 0.88, Size = UDim2.fromOffset(15, 15), Position = UDim2.fromOffset(14.5, 16.5) })
+		task.wait(1.4)
 	end
 end)
 
@@ -2111,14 +2112,14 @@ local function chromeCtrl(iconName, x, isClose)
 	state.icon.SetColor(idleColor)
 
 	btn.MouseEnter:Connect(function()
-		tween(btn, Anim.Fast, {
+		tween(btn, Anim.Soft, {
 			BackgroundTransparency = 0,
 			BackgroundColor3 = isClose and Color3.fromRGB(72, 28, 28) or Theme.ElementHover,
 		})
 		state.icon.SetColor(state.hover)
 	end)
 	btn.MouseLeave:Connect(function()
-		tween(btn, Anim.Fast, { BackgroundTransparency = 1 })
+		tween(btn, Anim.Soft, { BackgroundTransparency = 1 })
 		state.icon.SetColor(state.idle)
 	end)
 
@@ -2482,22 +2483,24 @@ local navLabel = make("TextLabel", {
 navLabel.Parent = tabHolder
 
 local tabIndicator = make("Frame", {
-	Size = UDim2.fromOffset(3, 26),
+	Size = UDim2.fromOffset(2, 28),
 	BackgroundColor3 = Theme.Accent,
+	BackgroundTransparency = 0.05,
 	BorderSizePixel = 0,
 	Position = UDim2.fromOffset(5, 36),
 	ZIndex = 4,
-}, { corner(2) })
+}, { corner(1) })
 tabIndicator.Parent = sidebar
 registerAccent(tabIndicator, "BackgroundColor3")
+-- Soft silver fill track (no bloom / glow pulse)
 local tabIndicatorGlow = make("Frame", {
-	Size = UDim2.fromOffset(10, 34),
-	Position = UDim2.fromOffset(-3, -4),
-	BackgroundColor3 = Theme.Accent,
-	BackgroundTransparency = 0.82,
+	Size = UDim2.fromOffset(3, 28),
+	Position = UDim2.fromOffset(0, 0),
+	BackgroundColor3 = Theme.AccentSoft,
+	BackgroundTransparency = 0.88,
 	BorderSizePixel = 0,
 	ZIndex = 3,
-}, { corner(4) })
+}, { corner(1) })
 tabIndicatorGlow.Parent = tabIndicator
 registerAccent(tabIndicatorGlow, "BackgroundColor3")
 
@@ -2516,12 +2519,12 @@ local avatarGlow = make("Frame", {
 	Position = UDim2.new(0, 6, 0.5, 0),
 	AnchorPoint = Vector2.new(0, 0.5),
 	BackgroundColor3 = Theme.Accent,
-	BackgroundTransparency = 0.78,
+	BackgroundTransparency = 0.88,
 	ZIndex = 1,
 }, { corner(22) })
 avatarGlow.Parent = userCard
 registerAccent(avatarGlow, "BackgroundColor3")
-softPulse(avatarGlow, "BackgroundTransparency", 0.72, 0.9, 1.6)
+softPulse(avatarGlow, "BackgroundTransparency", 0.86, 0.94, 2.2)
 
 local avatarRing = stroke(Theme.Accent, 2, 0.15)
 local avatar = make("ImageLabel", {
@@ -3080,7 +3083,7 @@ local function switchTab(tab)
 	for _, t in ipairs(tabs) do
 		local on = (t == tab)
 		tween(t.Button, Anim.Soft, {
-			BackgroundTransparency = on and 0 or 1,
+			BackgroundTransparency = on and 0.12 or 1,
 			BackgroundColor3 = on and Theme.ElementHover or Theme.Element,
 		})
 		if t.Label then
@@ -3093,8 +3096,8 @@ local function switchTab(tab)
 		end
 		if t.IconBg then
 			tween(t.IconBg, Anim.Soft, {
-				BackgroundTransparency = on and 0.02 or 0.35,
-				BackgroundColor3 = on and Color3.fromRGB(48, 48, 56) or Color3.fromRGB(28, 28, 32),
+				BackgroundTransparency = on and 0.08 or 0.35,
+				BackgroundColor3 = on and Color3.fromRGB(44, 44, 50) or Color3.fromRGB(28, 28, 32),
 			})
 			local scale = t.IconBg:FindFirstChildOfClass("UIScale")
 			if not scale then
@@ -3102,9 +3105,9 @@ local function switchTab(tab)
 				scale.Parent = t.IconBg
 			end
 			if on then
-				tween(scale, Anim.Press, { Scale = 1.08 })
-				task.delay(0.12, function()
-					if scale.Parent then tween(scale, Anim.Release, { Scale = 1 }) end
+				tween(scale, Anim.Soft, { Scale = 1.03 })
+				task.delay(0.2, function()
+					if scale.Parent then tween(scale, Anim.Soft, { Scale = 1 }) end
 				end)
 			end
 		end
@@ -3117,46 +3120,38 @@ local function switchTab(tab)
 		end
 	end
 
-	local indY = tab.Button.AbsolutePosition.Y - sidebar.AbsolutePosition.Y + 11
-	tween(tabIndicator, Anim.Smooth, {
+	local indY = tab.Button.AbsolutePosition.Y - sidebar.AbsolutePosition.Y + 10
+	tween(tabIndicator, Anim.Nav, {
 		Position = UDim2.fromOffset(5, indY),
-		Size = UDim2.fromOffset(3, 26),
+		Size = UDim2.fromOffset(2, 28),
 	})
-	if tabIndicatorGlow then
-		tween(tabIndicatorGlow, Anim.Soft, { BackgroundTransparency = 0.72 })
-		task.delay(0.22, function()
-			if tabIndicatorGlow and tabIndicatorGlow.Parent then
-				tween(tabIndicatorGlow, Anim.Smooth, { BackgroundTransparency = 0.82 })
-			end
-		end)
-	end
 
 	local premTab = State.premium == true
 	if prev then
 		local old = prev.Page
-		tween(old, Anim.Fast, {
+		tween(old, Anim.Soft, {
 			GroupTransparency = 1,
-			Position = UDim2.fromOffset(premTab and -10 or -8, premTab and 7 or 6),
+			Position = UDim2.fromOffset(premTab and -8 or -6, premTab and 5 or 4),
 		})
-		task.delay(0.12, function()
+		task.delay(0.18, function()
 			if activeTab ~= prev then old.Visible = false end
 		end)
 	end
 
 	local page = tab.Page
 	page.Visible = true
-	page.Position = UDim2.fromOffset(premTab and 16 or 14, premTab and 9 or 8)
+	page.Position = UDim2.fromOffset(premTab and 12 or 10, premTab and 6 or 5)
 	page.GroupTransparency = 1
 	local pageScale = page:FindFirstChild("PageScale")
 	if not pageScale then
-		pageScale = make("UIScale", { Name = "PageScale", Scale = 0.985 })
+		pageScale = make("UIScale", { Name = "PageScale", Scale = 0.988 })
 		pageScale.Parent = page
 	else
-		pageScale.Scale = 0.985
+		pageScale.Scale = 0.988
 	end
 	tween(page, Anim.Smooth, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
-	tween(pageScale, Anim.Spring, { Scale = 1 })
-	task.delay(0.06, function()
+	tween(pageScale, Anim.Smooth, { Scale = 1 })
+	task.delay(0.08, function()
 		if activeTab == tab then staggerAnimatePage(page) end
 	end)
 end
@@ -3316,21 +3311,20 @@ local function createTab(nameOrConfig)
 
 	btn.MouseEnter:Connect(function()
 		if activeTab ~= tab then
-			tween(btn, Anim.Fast, { BackgroundTransparency = 0.55 })
-			tween(iconBg, Anim.Fast, { BackgroundTransparency = 0.1, BackgroundColor3 = Color3.fromRGB(40, 40, 46) })
+			tween(btn, Anim.Soft, { BackgroundTransparency = 0.62 })
+			tween(iconBg, Anim.Soft, { BackgroundTransparency = 0.18, BackgroundColor3 = Color3.fromRGB(38, 38, 44) })
 			iconApi.SetColor(iconColor)
 		end
 	end)
 	btn.MouseLeave:Connect(function()
 		if activeTab ~= tab then
-			tween(btn, Anim.Fast, { BackgroundTransparency = 1 })
-			tween(iconBg, Anim.Fast, { BackgroundTransparency = 0.35, BackgroundColor3 = Color3.fromRGB(28, 28, 32) })
+			tween(btn, Anim.Soft, { BackgroundTransparency = 1 })
+			tween(iconBg, Anim.Soft, { BackgroundTransparency = 0.35, BackgroundColor3 = Color3.fromRGB(28, 28, 32) })
 			iconApi.SetColor(iconColor)
 		end
 	end)
 	btn.MouseButton1Click:Connect(function()
 		switchTab(tab)
-		sparkBurst(btn, 24, 23, iconColor, 5)
 	end)
 
 	if bindTabAPI then
@@ -3386,7 +3380,7 @@ local function hoverCard(holder, cardStroke, cardScale)
 			})
 		end
 		if cardScale then
-			tween(cardScale, Anim.Release, { Scale = 1 })
+			tween(cardScale, Anim.Soft, { Scale = 1 })
 		end
 	end)
 end
