@@ -1229,6 +1229,7 @@ end
 print("[ZENLESS] loaded")
 
 local WIN_W, WIN_H, MINI_H = 610, 430, 48
+local minimized = false -- early: resize pads / title layout / shell helpers share this
 local AVATAR_URL = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
 local DISPLAY_NAME = player.DisplayName
 local USER_NAME = player.Name
@@ -1977,22 +1978,36 @@ local versionLabel = make("TextLabel", {
 })
 versionLabel.Parent = titleBar
 
+local function measureLabelWidth(label, fallbackChars)
+	local ok, bounds = pcall(function()
+		return TextService:GetTextSize(
+			tostring(label.Text or ""),
+			label.TextSize,
+			label.Font,
+			Vector2.new(10000, MINI_H)
+		)
+	end)
+	if ok and bounds and typeof(bounds) == "Vector2" then
+		return bounds.X
+	end
+	return math.max(28, #(tostring(label.Text or "")) * (fallbackChars or 7))
+end
+
 local function layoutTitleVersion()
-	local barW = titleBar.AbsoluteSize.X
+	local abs = titleBar.AbsoluteSize
+	local barW = (typeof(abs) == "Vector2" and abs.X) or 0
+	if barW < 1 then
+		barW = root.Size.X.Offset
+	end
 	if barW < 1 then return end
-	local verW = math.max(TextService:GetTextSize(
-		versionLabel.Text,
-		versionLabel.TextSize,
-		versionLabel.Font,
-		Vector2.new(10000, MINI_H)
-	).X, 28)
-	local maxTitleW = math.max(40, barW - TITLE_LEFT - TITLE_RIGHT_RESERVE - VERSION_GAP - verW)
-	local naturalW = TextService:GetTextSize(
-		titleLabel.Text,
-		titleLabel.TextSize,
-		titleLabel.Font,
-		Vector2.new(10000, MINI_H)
-	).X
+	local reserve = TITLE_RIGHT_RESERVE
+	-- Compact mini chrome: right controls stay, but reserve less so title/version still fit
+	if minimized and barW < 420 then
+		reserve = math.min(reserve, math.max(160, barW * 0.55))
+	end
+	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
+	local maxTitleW = math.max(36, barW - TITLE_LEFT - reserve - VERSION_GAP - verW)
+	local naturalW = measureLabelWidth(titleLabel, 9)
 	local titleW = math.min(naturalW, maxTitleW)
 	titleLabel.Size = UDim2.fromOffset(titleW, MINI_H)
 	titleLabel.Position = UDim2.fromOffset(TITLE_LEFT, 0)
@@ -2168,7 +2183,9 @@ make("UIGradient", {
 local targetPos = root.Position
 local resizing = false
 local resizeEdge = nil
+local resizePads = {}
 local lastTitleClick = 0
+local preMinimizeSize = nil -- restored on expand
 local minimizeWindow -- forward
 local setWindowPinned
 local setSizePreset
@@ -2176,13 +2193,57 @@ local setFullscreen
 local setSidebarCollapsed
 local applyWindowOpacity
 
+local function computeMiniWidth()
+	local titleW = math.min(measureLabelWidth(titleLabel, 9), 140)
+	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
+	-- left cluster + gap + fps(72) + gap + bell(26) + gap + controls(70) + pads
+	local left = TITLE_LEFT + titleW + VERSION_GAP + verW + 16
+	local right = 72 + 10 + 26 + 14 + 70 + 14
+	return math.clamp(math.floor(left + right), 300, math.max(WIN_W, 300))
+end
+
+local function setResizeEnabled(on)
+	on = on and true or false
+	for i = 1, #resizePads do
+		local pad = resizePads[i]
+		if pad and pad.Parent then
+			pad.Active = on
+			pad.Visible = on
+		end
+	end
+	if not on then
+		resizing = false
+		resizeEdge = nil
+	end
+end
+
+local function normalizeRootOffset()
+	-- Keep offset-only top-left; never remap via AbsolutePosition (breaks gethui / nil Absolute*)
+	root.AnchorPoint = Vector2.new(0, 0)
+	if root.Position.X.Scale ~= 0 or root.Position.Y.Scale ~= 0 then
+		local vp = getViewport()
+		local x = root.Position.X.Scale * vp.X + root.Position.X.Offset
+		local y = root.Position.Y.Scale * vp.Y + root.Position.Y.Offset
+		root.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+	end
+	targetPos = root.Position
+end
+
 local function getViewport()
 	local cam = workspace.CurrentCamera
 	return cam and cam.ViewportSize or Vector2.new(1920, 1080)
 end
 
 local function absRootPos()
-	return root.AbsolutePosition, root.AbsoluteSize
+	local pos, size
+	local ok = pcall(function()
+		pos = root.AbsolutePosition
+		size = root.AbsoluteSize
+	end)
+	if ok and typeof(pos) == "Vector2" and typeof(size) == "Vector2" then
+		return pos, size
+	end
+	return Vector2.new(root.Position.X.Offset, root.Position.Y.Offset), Vector2.new(root.Size.X.Offset, root.Size.Y.Offset)
 end
 
 local function setRootOffset(x, y)
@@ -2205,6 +2266,7 @@ end
 
 local function rememberWindowGeometry()
 	-- Never persist minimized / broken sizes (this was collapsing the whole UI)
+	if minimized then return end
 	local w = root.Size.X.Offset
 	local h = root.Size.Y.Offset
 	if w < 420 or h < 280 then return end
@@ -2264,14 +2326,7 @@ do
 
 	local function beginDrag(mx, my)
 		if Flags.LockLayout or Flags.Fullscreen then return end
-		-- Keep offset-only top-left; never remap via AbsolutePosition (breaks gethui)
-		root.AnchorPoint = Vector2.new(0, 0)
-		if root.Position.X.Scale ~= 0 or root.Position.Y.Scale ~= 0 then
-			local vp = getViewport()
-			local x = root.Position.X.Scale * vp.X + root.Position.X.Offset
-			local y = root.Position.Y.Scale * vp.Y + root.Position.Y.Offset
-			root.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
-		end
+		normalizeRootOffset()
 		startMouse = Vector2.new(mx, my)
 		startPos = Vector2.new(root.Position.X.Offset, root.Position.Y.Offset)
 		targetPos = root.Position
@@ -2290,6 +2345,36 @@ do
 		local nx, ny = clampRoot(startPos.X + dx, startPos.Y + dy)
 		root.Position = UDim2.fromOffset(nx, ny)
 		targetPos = root.Position
+	end
+
+	local function applyResizeAt(mx, my)
+		if not resizing or not resizeEdge then return end
+		if Flags.LockLayout or Flags.Fullscreen or minimized then
+			resizing = false
+			resizeEdge = nil
+			return
+		end
+		local x, y = root.Position.X.Offset, root.Position.Y.Offset
+		local w, h = root.Size.X.Offset, root.Size.Y.Offset
+		local minW, minH = 420, 280
+		local edge = resizeEdge
+		if string.find(edge, "r", 1, true) then w = math.max(minW, mx - x) end
+		if string.find(edge, "b", 1, true) then h = math.max(minH, my - y) end
+		if string.find(edge, "l", 1, true) then
+			local nw = math.max(minW, (x + w) - mx)
+			x = (x + w) - nw
+			w = nw
+		end
+		if string.find(edge, "t", 1, true) then
+			local nh = math.max(minH, (y + h) - my)
+			y = (y + h) - nh
+			h = nh
+		end
+		x, y = snapPosition(x, y, w, h)
+		root.Size = UDim2.fromOffset(w, h)
+		root.Position = UDim2.fromOffset(x, y)
+		targetPos = root.Position
+		WIN_W, WIN_H = w, h
 	end
 
 	local function tryBegin()
@@ -2313,29 +2398,10 @@ do
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if resizing and resizeEdge and input.UserInputType == Enum.UserInputType.MouseMovement then
-			if Flags.LockLayout then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+		if resizing then
 			local mouse = UserInputService:GetMouseLocation()
-			local x, y = root.Position.X.Offset, root.Position.Y.Offset
-			local w, h = root.Size.X.Offset, root.Size.Y.Offset
-			local minW, minH = 420, 280
-			if string.find(resizeEdge, "r") then w = math.max(minW, mouse.X - x) end
-			if string.find(resizeEdge, "b") then h = math.max(minH, mouse.Y - y) end
-			if string.find(resizeEdge, "l") then
-				local nw = math.max(minW, (x + w) - mouse.X)
-				x = (x + w) - nw
-				w = nw
-			end
-			if string.find(resizeEdge, "t") then
-				local nh = math.max(minH, (y + h) - mouse.Y)
-				y = (y + h) - nh
-				h = nh
-			end
-			x, y = snapPosition(x, y, w, h)
-			root.Size = UDim2.fromOffset(w, h)
-			root.Position = UDim2.fromOffset(x, y)
-			targetPos = root.Position
-			WIN_W, WIN_H = w, h
+			applyResizeAt(mouse.X, mouse.Y)
 		end
 	end)
 
@@ -2345,16 +2411,21 @@ do
 			if resizing then
 				resizing = false
 				resizeEdge = nil
-				rememberWindowGeometry()
+				if not minimized then
+					rememberWindowGeometry()
+				end
 			end
 		end
 	end)
 
-	-- Drive drag every frame (InputChanged is unreliable in many executors / gethui)
+	-- Drive drag/resize every frame (InputChanged is unreliable in many executors / gethui)
 	RunService.RenderStepped:Connect(function()
-		if not dragging then return end
 		local m = UserInputService:GetMouseLocation()
-		applyDragAt(m.X, m.Y)
+		if dragging then
+			applyDragAt(m.X, m.Y)
+		elseif resizing then
+			applyResizeAt(m.X, m.Y)
+		end
 	end)
 end
 
@@ -2363,14 +2434,14 @@ targetPos = root.Position
 -- Resize hit pads
 do
 	local edges = {
-		{ "l", UDim2.new(0, 4, 1, -16), UDim2.fromOffset(0, 8), Enum.SizeConstraint.RelativeYY },
-		{ "r", UDim2.new(0, 4, 1, -16), UDim2.new(1, -4, 0, 8), nil },
-		{ "t", UDim2.new(1, -16, 0, 4), UDim2.fromOffset(8, 0), nil },
-		{ "b", UDim2.new(1, -16, 0, 4), UDim2.new(0, 8, 1, -4), nil },
-		{ "tl", UDim2.fromOffset(8, 8), UDim2.fromOffset(0, 0), nil },
-		{ "tr", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 0, 0), nil },
-		{ "bl", UDim2.fromOffset(8, 8), UDim2.new(0, 0, 1, -8), nil },
-		{ "br", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 1, -8), nil },
+		{ "l", UDim2.new(0, 4, 1, -16), UDim2.fromOffset(0, 8) },
+		{ "r", UDim2.new(0, 4, 1, -16), UDim2.new(1, -4, 0, 8) },
+		{ "t", UDim2.new(1, -16, 0, 4), UDim2.fromOffset(8, 0) },
+		{ "b", UDim2.new(1, -16, 0, 4), UDim2.new(0, 8, 1, -4) },
+		{ "tl", UDim2.fromOffset(8, 8), UDim2.fromOffset(0, 0) },
+		{ "tr", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 0, 0) },
+		{ "bl", UDim2.fromOffset(8, 8), UDim2.new(0, 0, 1, -8) },
+		{ "br", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 1, -8) },
 	}
 	for _, e in ipairs(edges) do
 		local pad = make("TextButton", {
@@ -2381,17 +2452,17 @@ do
 			Text = "",
 			ZIndex = 80,
 			AutoButtonColor = false,
+			Active = true,
 		})
 		pad.Parent = root
+		resizePads[#resizePads + 1] = pad
 		pad.InputBegan:Connect(function(input)
-			if Flags.LockLayout or Flags.Fullscreen then return end
+			if Flags.LockLayout or Flags.Fullscreen or minimized then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				normalizeRootOffset()
 				resizing = true
 				resizeEdge = e[1]
-				root.AnchorPoint = Vector2.new(0, 0)
-				local ap = root.AbsolutePosition
-				root.Position = UDim2.fromOffset(ap.X, ap.Y)
-				targetPos = root.Position
+				State.lastInteraction = os.clock()
 			end
 		end)
 	end
@@ -3120,11 +3191,21 @@ local function switchTab(tab)
 		end
 	end
 
-	local indY = tab.Button.AbsolutePosition.Y - sidebar.AbsolutePosition.Y + 10
-	tween(tabIndicator, Anim.Nav, {
-		Position = UDim2.fromOffset(5, indY),
-		Size = UDim2.fromOffset(2, 28),
-	})
+	local indY = 10
+	pcall(function()
+		if minimized or not body or not body.Visible then return end
+		local bp = tab.Button.AbsolutePosition
+		local sp = sidebar.AbsolutePosition
+		if typeof(bp) == "Vector2" and typeof(sp) == "Vector2" then
+			indY = bp.Y - sp.Y + 10
+		end
+	end)
+	if tabIndicator and tabIndicator.Visible then
+		tween(tabIndicator, Anim.Nav, {
+			Position = UDim2.fromOffset(5, indY),
+			Size = UDim2.fromOffset(2, 28),
+		})
+	end
 
 	local premTab = State.premium == true
 	if prev then
@@ -5975,7 +6056,7 @@ end
 
 -- ============ WINDOW LIFECYCLE ============
 local uiVisible = true
-local minimized = false
+-- minimized declared earlier (near WIN_W) for resize/title layout
 local hasCelebrated = false
 local toggleKey = Enum.KeyCode.RightShift
 
@@ -6028,14 +6109,8 @@ local function showWindow()
 	-- restore remembered geometry — always top-left anchor for correct dragging
 	root.AnchorPoint = Vector2.new(0, 0)
 	if State.savedWindowPos then
-		local sp = State.savedWindowPos
-		-- normalize any old center-anchored saves to offset-only
-		if sp.X.Scale ~= 0 or sp.Y.Scale ~= 0 then
-			local abs = root.AbsolutePosition
-			root.Position = UDim2.fromOffset(abs.X, abs.Y)
-		else
-			root.Position = UDim2.fromOffset(sp.X.Offset, sp.Y.Offset)
-		end
+		root.Position = State.savedWindowPos
+		normalizeRootOffset()
 	else
 		local vp = getViewport()
 		root.Position = UDim2.fromOffset(
@@ -6070,9 +6145,11 @@ local function showWindow()
 end
 
 local function hideWindow()
-	rememberWindowGeometry()
-	State.savedWindowPos = root.Position
-	State.savedWindowSize = root.Size
+	if not minimized then
+		rememberWindowGeometry()
+		State.savedWindowPos = root.Position
+		State.savedWindowSize = root.Size
+	end
 	if windowRim then windowRim.Visible = false end
 	tween(window, Anim.Smooth, { GroupTransparency = 1 })
 	tween(windowScale, Anim.Smooth, { Scale = 0.94 })
@@ -6215,23 +6292,61 @@ local contentPanelRef = contentPanel
 local sidebarCollapseToken = 0
 
 minimizeWindow = function()
-	minimized = not minimized
-	pcall(function()
-		local info = Anim.Minimize or Anim.Smooth
-		if body then
-			body.Visible = not minimized
+	local info = Anim.Minimize or Anim.Soft or Anim.Smooth
+	if not minimized then
+		-- collapsing → compact title pill
+		local w = root.Size.X.Offset
+		local h = root.Size.Y.Offset
+		if w >= 420 and h >= 280 then
+			WIN_W, WIN_H = w, h
+			preMinimizeSize = UDim2.fromOffset(w, h)
+			State.savedWindowSize = preMinimizeSize
+		elseif not preMinimizeSize then
+			preMinimizeSize = UDim2.fromOffset(math.max(WIN_W, 420), math.max(WIN_H, 280))
 		end
-		tween(root, info, {
-			Size = UDim2.fromOffset(WIN_W, minimized and MINI_H or WIN_H),
-		})
-		tween(windowAccentStroke, info, { Transparency = minimized and 0.72 or 0.55 })
-		if windowScale then
-			windowScale.Scale = minimized and 0.97 or 1.025
-			tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
+		minimized = true
+		setResizeEnabled(false)
+		pcall(function()
+			if body then body.Visible = false end
+			if tabIndicator then tabIndicator.Visible = false end
+			local miniW = computeMiniWidth()
+			tween(root, info, {
+				Size = UDim2.fromOffset(miniW, MINI_H),
+			})
+			tween(windowAccentStroke, info, { Transparency = 0.72 })
+			if windowScale then
+				windowScale.Scale = 0.97
+				tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
+			end
+			setMinimizeIcon("plus")
+			playUiSound("click")
+			task.defer(layoutTitleVersion)
+		end)
+	else
+		-- expanding → restore previous size
+		minimized = false
+		local target = preMinimizeSize or State.savedWindowSize
+		if not target or target.Y.Offset < 280 or target.X.Offset < 420 then
+			target = UDim2.fromOffset(math.max(WIN_W, 420), math.max(WIN_H, 280))
 		end
-		setMinimizeIcon(minimized and "plus" or "minus")
-		playUiSound("click")
-	end)
+		WIN_W, WIN_H = target.X.Offset, target.Y.Offset
+		pcall(function()
+			if body then body.Visible = true end
+			if tabIndicator then
+				tabIndicator.Visible = not Flags.SidebarCollapsed
+			end
+			tween(root, info, { Size = target })
+			tween(windowAccentStroke, info, { Transparency = 0.55 })
+			if windowScale then
+				windowScale.Scale = 1.025
+				tween(windowScale, Anim.Spring, { Scale = State.uiScaleValue or Flags.UiScale or 1 })
+			end
+			setMinimizeIcon("minus")
+			setResizeEnabled(true)
+			playUiSound("click")
+			task.defer(layoutTitleVersion)
+		end)
+	end
 	return minimized
 end
 
@@ -6254,10 +6369,17 @@ setSizePreset = function(name)
 	State.currentPreset = sizePresets[name] and name or "Normal"
 	WIN_W, WIN_H = p[1], p[2]
 	minimized = false
+	preMinimizeSize = UDim2.fromOffset(WIN_W, WIN_H)
 	pcall(function()
+		if body then body.Visible = true end
+		if tabIndicator then
+			tabIndicator.Visible = not Flags.SidebarCollapsed
+		end
+		setResizeEnabled(true)
 		tween(root, Anim.Smooth, { Size = UDim2.fromOffset(WIN_W, WIN_H) })
 		setMinimizeIcon("minus")
 		rememberWindowGeometry()
+		task.defer(layoutTitleVersion)
 	end)
 	return State.currentPreset
 end
@@ -6281,6 +6403,8 @@ setFullscreen = function(on)
 			root.Position = targetPos
 			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
 			minimized = false
+			if body then body.Visible = true end
+			setResizeEnabled(false) -- fullscreen: no edge resize
 			setMinimizeIcon("minus")
 		else
 			if preFullscreen then
@@ -6292,6 +6416,7 @@ setFullscreen = function(on)
 			else
 				setSizePreset(State.currentPreset or "Normal")
 			end
+			setResizeEnabled(not minimized)
 		end
 		rememberWindowGeometry()
 	end)
