@@ -1,5 +1,5 @@
 --[[
-	ZENLESS v7.2 — ScriptHub GUI Library (black / grey / silver)
+	ZENLESS 0.0.1 — ScriptHub GUI Library 
 
 	GitHub:
 		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
@@ -24,10 +24,6 @@
 		local Window = Zenless:CreateWindow({ Title = "ZENLESS ScriptHub" })
 		local Tab = Window:AddTab({ Title = "Combat", Icon = "target" }) -- or Zenless:AddTab
 		-- Tier after unlock: Zenless.KeyTier / Window.KeyTier / Zenless:GetLicenseTier()
-
-	v7.3: Window:AddTab, StandardKeys + PremiumKeys, KeyTier expose, key UI polish.
-	v7.2: safer KRNL boot, fixed demo return, lighter load, cleaner PremiumKeys.
-	v7.1: Premium key tiers + refined premium chrome.
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -46,13 +42,13 @@ if not player then
 	player = Players.LocalPlayer
 end
 
-local LIBRARY_VERSION = "7.3"
+local LIBRARY_VERSION = "0.0.1"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "zenless_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
--- ============ THEME (black / grey / silver) ============
+-- ============ THEME ============
 local Theme = {
 	Background   = Color3.fromRGB(14, 14, 16),
 	Sidebar      = Color3.fromRGB(18, 18, 20),
@@ -105,7 +101,7 @@ local Anim = {
 local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
-	DisableParticles = true, -- KRNL-safe boot; enable later via SetFlag
+	DisableParticles = true, -- Executor-safe boot; enable later via SetFlag
 	DisableGrid = true,
 	DisableDust = true,
 	LazyTabs = false,
@@ -665,7 +661,7 @@ local IconNames = {
 }
 
 --[[
-	Rounded metallic rim + traveling silver sheen.
+
 	Uses UICorner + UIStroke (no square edge rectangles).
 ]]
 local function attachPerimeterLight(parent, opts)
@@ -2665,7 +2661,7 @@ do
 	end
 end
 
--- ============ NOTIFICATION SYSTEM (ZENLESS v4) ============
+-- ============ NOTIFICATION SYSTEM ============
 local notify, dismissNotif, activeNotifs
 (function()
 local NOTIF_W = 320
@@ -4252,12 +4248,29 @@ local keybindCapturing = false
 
 local function createKeybind(tab, text, defaultKey, callback, opts)
 	opts = opts or {}
+	local flag = opts.Flag
 	local key = defaultKey
 	local lastTap = 0
 	local holdStart = nil
 	local holdThreshold = opts.HoldThreshold or 0.45
 	local onDouble = opts.OnDoubleTap or opts.DoubleTap
 	local onHold = opts.OnHold or opts.Hold
+
+	local function resolveKey(v)
+		if typeof(v) == "EnumItem" then return v end
+		if type(v) == "string" and v ~= "" then
+			local ok, item = pcall(function() return Enum.KeyCode[v] end)
+			if ok and item then return item end
+		end
+		return nil
+	end
+	if flag and ConfigData.values[flag] ~= nil then
+		local restored = resolveKey(ConfigData.values[flag])
+		if restored then key = restored end
+	end
+	if typeof(key) ~= "EnumItem" then
+		key = Enum.KeyCode.Unknown
+	end
 
 	local holder = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, 38),
@@ -4267,6 +4280,7 @@ local function createKeybind(tab, text, defaultKey, callback, opts)
 		LayoutOrder = nextOrder(),
 	}, { corner(8) })
 	holder.Parent = tab.Container
+	holder:SetAttribute("ZenlessTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
 	hoverCard(holder, cardStroke, cardScale)
 
@@ -4299,6 +4313,19 @@ local function createKeybind(tab, text, defaultKey, callback, opts)
 	})
 	keyLabel.Parent = keyBox
 
+	local function commitKey(k, silent)
+		if typeof(k) ~= "EnumItem" then return end
+		key = k
+		keyLabel.Text = key.Name
+		if flag then
+			ConfigData.values[flag] = key.Name
+			task.defer(saveConfigFile)
+		end
+		if not silent then
+			safeCall(callback, key)
+		end
+	end
+
 	holder.MouseButton1Click:Connect(function()
 		keybindCapturing = true
 		keyLabel.Text = "..."
@@ -4308,11 +4335,9 @@ local function createKeybind(tab, text, defaultKey, callback, opts)
 
 	UserInputService.InputBegan:Connect(function(input)
 		if keybindCapturing and input.UserInputType == Enum.UserInputType.Keyboard then
-			key = input.KeyCode
-			keyLabel.Text = key.Name
 			tween(keyBox.UIStroke, Anim.Fast, { Color = Theme.Stroke, Transparency = 0.35 })
 			tween(keyLabel, Anim.Fast, { TextColor3 = Theme.SubText })
-			safeCall(callback, key)
+			commitKey(input.KeyCode, false)
 			task.defer(function() keybindCapturing = false end)
 			return
 		end
@@ -4336,15 +4361,34 @@ local function createKeybind(tab, text, defaultKey, callback, opts)
 		end
 	end)
 
-	return {
+	local api = {
 		Get = function() return key end,
-		Set = function(k) key = k; keyLabel.Text = k.Name end,
+		Set = function(k, silent)
+			local resolved = resolveKey(k) or k
+			commitKey(resolved, silent == true)
+		end,
+		Flag = flag,
 	}
+	if flag then State.controlRegistry[flag] = api end
+	return api
 end
 
 local function createColorPicker(tab, text, defaultColor, callback, opts)
 	opts = opts or {}
-	local h = select(1, (defaultColor or Theme.Accent):ToHSV())
+	local flag = opts.Flag
+	local startColor = defaultColor or Theme.Accent
+	if flag and ConfigData.values[flag] ~= nil then
+		local saved = ConfigData.values[flag]
+		if typeof(saved) == "Color3" then
+			startColor = saved
+		elseif type(saved) == "string" then
+			local parsed = hexToColor(saved)
+			if parsed then startColor = parsed end
+		elseif type(saved) == "table" and saved.R and saved.G and saved.B then
+			startColor = Color3.new(saved.R, saved.G, saved.B)
+		end
+	end
+	local h = select(1, startColor:ToHSV())
 	local open = false
 	local closedH, openH = 38, 110
 
@@ -4355,6 +4399,7 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 		LayoutOrder = nextOrder(),
 	}, { corner(8) })
 	holder.Parent = tab.Container
+	holder:SetAttribute("ZenlessTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
 
 	local top = make("TextButton", {
@@ -4410,11 +4455,15 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 	local hexBox
 	local pushRecent, rebuildRecent
 
-	local function apply(saveRecent)
+	local function apply(saveRecent, silent)
 		local c = Color3.fromHSV(h, 1, 1)
 		preview.BackgroundColor3 = c
 		if hexBox then hexBox.Text = colorToHex(c) end
-		if callback then task.spawn(callback, c) end
+		if flag then
+			ConfigData.values[flag] = colorToHex(c)
+			task.defer(saveConfigFile)
+		end
+		if not silent and callback then task.spawn(callback, c) end
 		if saveRecent and pushRecent then
 			pushRecent(c)
 			if rebuildRecent then rebuildRecent() end
@@ -4536,7 +4585,6 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 	end)
 
 	eyeBtn.MouseButton1Click:Connect(function()
-		Zenless_Notify = nil
 		local picking = true
 		eyeBtn.Text = "Click…"
 		local conn
@@ -4548,12 +4596,9 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 				if conn then conn:Disconnect() end
 				-- sample accent-soft fallback (no pixel API in most executors)
 				local c = Theme.Accent
-				pcall(function()
-					if typeof(getrenv) == "function" then end
-				end)
 				h = select(1, c:ToHSV())
 				hueKnob.Position = UDim2.new(h, 0, 0.5, 0)
-				apply()
+				apply(true)
 			end
 		end)
 	end)
@@ -4563,14 +4608,25 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 		tween(holder, Anim.Smooth, { Size = UDim2.new(1, 0, 0, open and openH or closedH) })
 	end)
 
-	return {
+	local api = {
 		Get = function() return Color3.fromHSV(h, 1, 1) end,
-		Set = function(c)
-			h = select(1, c:ToHSV())
+		Set = function(c, silent)
+			if typeof(c) == "Color3" then
+				h = select(1, c:ToHSV())
+			elseif type(c) == "string" then
+				local parsed = hexToColor(c)
+				if not parsed then return end
+				h = select(1, parsed:ToHSV())
+			else
+				return
+			end
 			hueKnob.Position = UDim2.new(h, 0, 0.5, 0)
-			apply()
+			apply(false, silent == true)
 		end,
+		Flag = flag,
 	}
+	if flag then State.controlRegistry[flag] = api end
+	return api
 end
 
 local function setAccent(color)
@@ -4679,7 +4735,7 @@ local function applyPremiumMode(on, opts)
 	return State.premium
 end
 
--- ============ NEW COMPONENTS (v5) ============
+-- ============ NEW COMPONENTS ============
 local V5
 V5 = (function()
 
@@ -8075,7 +8131,7 @@ end
 
 applyV6PublicAPI = function(Zenless)
 	if type(Zenless) ~= "table" then return Zenless end
-	Zenless.Version = LIBRARY_VERSION or Zenless.Version or "7.1"
+	Zenless.Version = LIBRARY_VERSION or Zenless.Version or "0.0.1"
 	Zenless.Flags = Flags
 	Zenless.IsPremium = function() return State.premium == true end
 	Zenless.GetLicenseTier = function() return State.licenseTier end
@@ -8285,7 +8341,7 @@ end)
 
 end)()
 
--- ============ KEY SYSTEM (v7 Premium ScriptHub Gate) ============
+-- ============ KEY SYSTEM (Premium ScriptHub Gate) ============
 local function runKeySystem(opts)
 	opts = type(opts) == "table" and opts or {}
 	local title = opts.Title or "ZENLESS"
@@ -9523,7 +9579,7 @@ function Zenless:CreateWindow(config)
 	return Zenless.Window
 end
 
--- Apply v6 API surface (window helpers, notifs, theme, components on tabs)
+-- Apply extended API surface (window helpers, notifs, theme, components on tabs)
 pcall(function()
 	applyV6PublicAPI(Zenless)
 end)
@@ -9646,7 +9702,7 @@ homeTab:AddParagraph("ZENLESS",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v7.0", "ZENLESS", "ScriptHub", "Silver" })
+homeTab:AddBadgeRow({ "v0.0.1", "ZENLESS", "ScriptHub", "Silver" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
@@ -9773,7 +9829,7 @@ settingsTab:AddButton({
 bootLibrary(homeTab)
 Zenless:Notify({
 	Title = "ZENLESS",
-	Content = "Demo mode. Use AimbotExample.lua for a real hub script.",
+	Content = "Demo mode. See AimbotExample.lua for the full UI API showcase.",
 	Type = "success",
 	Duration = 3,
 })
