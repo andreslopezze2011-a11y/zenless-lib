@@ -14,7 +14,7 @@
 			KeySystem = {
 				Title = "ZENLESS",
 				Subtitle = "ScriptHub Access",
-				Keys = { "12345678", "ZENLESS-HUB" },
+				StandardKeys = { "12345678", "ZENLESS-HUB" }, -- or Keys = {...}
 				PremiumKeys = { "VIP-ACCESS", "PREMIUM-ZENLESS", "ZENLESS-PRO" },
 				SaveKey = true,
 				KeyLink = "https://discord.gg/",
@@ -22,7 +22,10 @@
 			Loader = true,
 		})
 		local Window = Zenless:CreateWindow({ Title = "ZENLESS ScriptHub" })
+		local Tab = Window:AddTab({ Title = "Combat", Icon = "target" }) -- or Zenless:AddTab
+		-- Tier after unlock: Zenless.KeyTier / Window.KeyTier / Zenless:GetLicenseTier()
 
+	v7.3: Window:AddTab, StandardKeys + PremiumKeys, KeyTier expose, key UI polish.
 	v7.2: safer KRNL boot, fixed demo return, lighter load, cleaner PremiumKeys.
 	v7.1: Premium key tiers + refined premium chrome.
 ]]
@@ -43,7 +46,7 @@ if not player then
 	player = Players.LocalPlayer
 end
 
-local LIBRARY_VERSION = "7.2"
+local LIBRARY_VERSION = "7.3"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "zenless_config.json"
 local SNAP_PX = 20
@@ -8287,7 +8290,7 @@ local function runKeySystem(opts)
 	opts = type(opts) == "table" and opts or {}
 	local title = opts.Title or "ZENLESS"
 	local subtitle = opts.Subtitle or opts.SubTitle or "ScriptHub Access"
-	local note = opts.Note or opts.Description or "Enter your license key to unlock the hub."
+	local note = opts.Note or opts.Description -- filled after keys are parsed
 	local saveKey = opts.SaveKey ~= false
 	local fileName = opts.FileName or opts.KeyFile or "zenless_key.txt"
 	local keyLink = opts.KeyLink or opts.Discord or opts.Link
@@ -8346,6 +8349,10 @@ local function runKeySystem(opts)
 		if premium then premiumValid[n] = true end
 	end
 	if opts.Key then addKey(opts.Key, false) end
+	-- StandardKeys (preferred) + Keys (backward compatible alias)
+	if type(opts.StandardKeys) == "table" then
+		for _, k in ipairs(opts.StandardKeys) do addKey(k, false) end
+	end
 	if type(opts.Keys) == "table" then
 		for _, k in ipairs(opts.Keys) do addKey(k, false) end
 	end
@@ -8386,6 +8393,25 @@ local function runKeySystem(opts)
 					addKey(trimmed, isPrem and true or false)
 				end
 			end
+		end
+	end
+
+	local hasPremiumKeys = next(premiumValid) ~= nil
+	local hasStandardKeys = false
+	for n in pairs(valid) do
+		if not premiumValid[n] then
+			hasStandardKeys = true
+			break
+		end
+	end
+	-- Default note when caller left it blank
+	if (note == nil or note == "") then
+		if hasPremiumKeys and hasStandardKeys then
+			note = "Accepts Standard and Premium license keys."
+		elseif hasPremiumKeys then
+			note = "Enter your Premium license key."
+		else
+			note = "Enter your license key to unlock the hub."
 		end
 	end
 
@@ -8452,6 +8478,18 @@ local function runKeySystem(opts)
 	local function grantAccess(raw, tier)
 		tier = tier or getTier(raw) or "standard"
 		State.licenseTier = tier
+		pcall(function()
+			if type(Zenless) == "table" then
+				Zenless.KeyTier = tier
+				Zenless.LicenseTier = tier
+				Zenless.Premium = (tier == "premium")
+				if type(Zenless.Window) == "table" then
+					Zenless.Window.KeyTier = tier
+					Zenless.Window.LicenseTier = tier
+					Zenless.Window.Premium = (tier == "premium")
+				end
+			end
+		end)
 		if tier == "premium" then
 			pcall(function()
 				if applyPremiumMode then applyPremiumMode(true, { tier = "premium" }) end
@@ -8461,6 +8499,10 @@ local function runKeySystem(opts)
 				if applyPremiumMode then applyPremiumMode(false, { tier = "standard" }) end
 			end)
 		end
+		pcall(function()
+			local cb = opts.OnUnlock or opts.Unlocked
+			if type(cb) == "function" then cb(tier, raw) end
+		end)
 	end
 
 	local function getHwid()
@@ -8492,7 +8534,7 @@ local function runKeySystem(opts)
 				if showWindow then showWindow() end
 			end)
 		end
-		return true
+		return tier
 	end
 
 	State.keyGateActive = true
@@ -8626,12 +8668,21 @@ local function runKeySystem(opts)
 		ZIndex = 212,
 	}).Parent = card
 
+	local brandSub = "SCRIPTHUB"
+	if hasPremiumKeys and hasStandardKeys then
+		brandSub = "SCRIPTHUB  ·  STANDARD + PREMIUM"
+	elseif hasPremiumKeys then
+		brandSub = "SCRIPTHUB  ·  PREMIUM KEYS"
+	elseif hasStandardKeys then
+		brandSub = "SCRIPTHUB  ·  STANDARD KEYS"
+	end
+
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -90, 0, 14),
 		Position = UDim2.fromOffset(68, 36),
 		Font = Enum.Font.Gotham,
-		Text = "SCRIPTHUB  ·  STANDARD + PREMIUM KEYS",
+		Text = brandSub,
 		TextSize = 10,
 		TextColor3 = Color3.fromRGB(140, 140, 152),
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -8681,9 +8732,9 @@ local function runKeySystem(opts)
 		ZIndex = 212,
 	}).Parent = card
 
-	make("TextLabel", {
+	local noteLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -44, 0, 32),
+		Size = UDim2.new(1, -44, 0, 28),
 		Position = UDim2.fromOffset(22, 92),
 		Font = Enum.Font.Gotham,
 		Text = note,
@@ -8692,12 +8743,53 @@ local function runKeySystem(opts)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
 		ZIndex = 212,
-	}).Parent = card
+	})
+	noteLbl.Parent = card
+
+	-- Compact tier hint chips (only when both tiers exist)
+	local tierHintY = 124
+	if hasPremiumKeys and hasStandardKeys then
+		local hintRow = make("Frame", {
+			Size = UDim2.new(1, -44, 0, 22),
+			Position = UDim2.fromOffset(22, 122),
+			BackgroundTransparency = 1,
+			ZIndex = 212,
+		})
+		hintRow.Parent = card
+		make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, 6),
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+		}).Parent = hintRow
+		local function tierPill(label, color)
+			local pill = make("Frame", {
+				Size = UDim2.fromOffset(0, 18),
+				AutomaticSize = Enum.AutomaticSize.X,
+				BackgroundColor3 = color,
+				BackgroundTransparency = 0.88,
+				ZIndex = 213,
+			}, { corner(5), stroke(color, 1, 0.55) })
+			pill.Parent = hintRow
+			make("TextLabel", {
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(0, 18),
+				AutomaticSize = Enum.AutomaticSize.X,
+				Font = Enum.Font.GothamBold,
+				Text = "  " .. label .. "  ",
+				TextSize = 9,
+				TextColor3 = color,
+				ZIndex = 214,
+			}).Parent = pill
+		end
+		tierPill("STANDARD", Theme.Accent)
+		tierPill("PREMIUM", PREMIUM_ACCENT)
+		tierHintY = 148
+	end
 
 	-- Session strip
 	local session = make("Frame", {
-		Size = UDim2.new(1, -44, 0, 28),
-		Position = UDim2.fromOffset(22, 128),
+		Size = UDim2.new(1, -44, 0, 26),
+		Position = UDim2.fromOffset(22, tierHintY),
 		BackgroundColor3 = Color3.fromRGB(20, 20, 24),
 		ZIndex = 212,
 	}, { corner(8), stroke(Theme.Stroke, 1, 0.5) })
@@ -8715,16 +8807,17 @@ local function runKeySystem(opts)
 		ZIndex = 213,
 	}).Parent = session
 
+	local inputY = tierHintY + 36
 	local box = make("TextBox", {
 		Name = "KeyInput",
 		Size = UDim2.new(1, -96, 0, 46),
-		Position = UDim2.fromOffset(22, 168),
+		Position = UDim2.fromOffset(22, inputY),
 		BackgroundColor3 = Color3.fromRGB(16, 16, 20),
 		BorderSizePixel = 0,
 		ClearTextOnFocus = false,
 		Font = Enum.Font.GothamMedium,
 		Text = "",
-		PlaceholderText = "XXXX-XXXX-XXXX-XXXX",
+		PlaceholderText = "License key",
 		PlaceholderColor3 = Color3.fromRGB(90, 90, 102),
 		TextColor3 = Theme.Text,
 		TextSize = 15,
@@ -8741,7 +8834,7 @@ local function runKeySystem(opts)
 
 	local pasteBtn = make("TextButton", {
 		Size = UDim2.fromOffset(64, 46),
-		Position = UDim2.new(1, -86, 0, 168),
+		Position = UDim2.new(1, -86, 0, inputY),
 		BackgroundColor3 = Theme.Element,
 		Text = "Paste",
 		Font = Enum.Font.GothamMedium,
@@ -8752,10 +8845,11 @@ local function runKeySystem(opts)
 	}, { corner(11), stroke(Theme.Stroke, 1, 0.4) })
 	pasteBtn.Parent = card
 
+	local statusY = inputY + 52
 	local statusLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -44, 0, 16),
-		Position = UDim2.fromOffset(22, 220),
+		Size = UDim2.new(1, -130, 0, 16),
+		Position = UDim2.fromOffset(22, statusY),
 		Font = Enum.Font.Gotham,
 		Text = string.format("%d attempts remaining", maxAttempts),
 		TextSize = 11,
@@ -8768,7 +8862,7 @@ local function runKeySystem(opts)
 	-- Remember toggle
 	local rememberBtn = make("TextButton", {
 		Size = UDim2.fromOffset(18, 18),
-		Position = UDim2.new(1, -40, 0, 219),
+		Position = UDim2.new(1, -40, 0, statusY - 1),
 		BackgroundColor3 = remember and Theme.Accent or Theme.Element,
 		Text = "",
 		AutoButtonColor = false,
@@ -8779,7 +8873,7 @@ local function runKeySystem(opts)
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.fromOffset(70, 16),
-		Position = UDim2.new(1, -114, 0, 220),
+		Position = UDim2.new(1, -114, 0, statusY),
 		Font = Enum.Font.Gotham,
 		Text = "Remember",
 		TextSize = 11,
@@ -8788,9 +8882,10 @@ local function runKeySystem(opts)
 		ZIndex = 212,
 	}).Parent = card
 
+	local unlockY = statusY + 28
 	local unlockBtn = make("TextButton", {
 		Size = UDim2.new(1, -44, 0, 44),
-		Position = UDim2.fromOffset(22, 248),
+		Position = UDim2.fromOffset(22, unlockY),
 		BackgroundColor3 = Theme.Accent,
 		Text = "Unlock ScriptHub",
 		Font = Enum.Font.GothamBold,
@@ -8811,51 +8906,37 @@ local function runKeySystem(opts)
 	unlockBtn.Parent = card
 	registerAccent(unlockBtn, "BackgroundColor3")
 
+	local actionY = unlockY + 54
 	local actionRow = make("Frame", {
 		Size = UDim2.new(1, -44, 0, 36),
-		Position = UDim2.fromOffset(22, 302),
+		Position = UDim2.fromOffset(22, actionY),
 		BackgroundTransparency = 1,
 		ZIndex = 214,
+		Visible = keyLink ~= nil,
 	})
 	actionRow.Parent = card
-	make("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		Padding = UDim.new(0, 8),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}).Parent = actionRow
 
 	local getKeyBtn = make("TextButton", {
-		Size = UDim2.new(keyLink and 0.5 or 1, -4, 1, 0),
+		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Theme.Element,
-		Text = keyLink and "Get Key" or "Need a key?",
+		Text = "Get Key",
 		Font = Enum.Font.GothamMedium,
 		TextSize = 12,
 		TextColor3 = Theme.Text,
 		AutoButtonColor = false,
-		LayoutOrder = 1,
-		ZIndex = 215,
-		Visible = true,
-	}, { corner(9), stroke(Theme.Stroke, 1, 0.4) })
-	getKeyBtn.Parent = actionRow
-
-	local discordBtn = make("TextButton", {
-		Size = UDim2.new(0.5, -4, 1, 0),
-		BackgroundColor3 = Theme.Element,
-		Text = "Copy Discord",
-		Font = Enum.Font.GothamMedium,
-		TextSize = 12,
-		TextColor3 = Theme.Text,
-		AutoButtonColor = false,
-		LayoutOrder = 2,
 		ZIndex = 215,
 		Visible = keyLink ~= nil,
 	}, { corner(9), stroke(Theme.Stroke, 1, 0.4) })
-	discordBtn.Parent = actionRow
+	getKeyBtn.Parent = actionRow
 
+	-- Keep discordBtn alias for existing handlers (same control)
+	local discordBtn = getKeyBtn
+
+	local footerY = actionY + (keyLink and 44 or 8)
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -44, 0, 14),
-		Position = UDim2.fromOffset(22, 348),
+		Position = UDim2.fromOffset(22, footerY),
 		Font = Enum.Font.Gotham,
 		Text = "ZENLESS v" .. tostring(LIBRARY_VERSION) .. "  ·  Secure key gate",
 		TextSize = 10,
@@ -8863,6 +8944,10 @@ local function runKeySystem(opts)
 		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 212,
 	}).Parent = card
+
+	-- Fit card height to content
+	CARD_H = math.max(340, footerY + 28)
+	host.Size = UDim2.fromOffset(CARD_W - 24, CARD_H - 18)
 
 	local function finish(ok, raw, tier)
 		if finished then return end
@@ -9006,7 +9091,6 @@ local function runKeySystem(opts)
 
 	unlockBtn.MouseButton1Click:Connect(tryUnlock)
 	getKeyBtn.MouseButton1Click:Connect(copyLink)
-	discordBtn.MouseButton1Click:Connect(copyLink)
 
 	box:GetPropertyChangedSignal("Text"):Connect(function()
 		local tier = getTier(box.Text)
@@ -9049,13 +9133,15 @@ local function runKeySystem(opts)
 	unlockBtn.MouseLeave:Connect(function()
 		tween(unlockBtn, Anim.Fast, { BackgroundColor3 = Theme.Accent })
 	end)
-	for _, b in ipairs({ pasteBtn, getKeyBtn, discordBtn }) do
-		b.MouseEnter:Connect(function()
-			tween(b, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
-		end)
-		b.MouseLeave:Connect(function()
-			tween(b, Anim.Fast, { BackgroundColor3 = Theme.Element })
-		end)
+	for _, b in ipairs({ pasteBtn, getKeyBtn }) do
+		if b and b.Parent then
+			b.MouseEnter:Connect(function()
+				tween(b, Anim.Fast, { BackgroundColor3 = Theme.ElementHover })
+			end)
+			b.MouseLeave:Connect(function()
+				tween(b, Anim.Fast, { BackgroundColor3 = Theme.Element })
+			end)
+		end
 	end
 	closeBtn.MouseEnter:Connect(function()
 		if closeIcon and closeIcon.SetColor then closeIcon.SetColor(Theme.Error) end
@@ -9084,7 +9170,10 @@ local function runKeySystem(opts)
 		task.wait(0.03)
 	end
 
-	return unlocked
+	if unlocked then
+		return State.licenseTier ~= "none" and State.licenseTier or "standard"
+	end
+	return false
 end
 
 -- ============ PUBLIC LIBRARY ============
@@ -9099,14 +9188,20 @@ Zenless = {
 	DrawIcon = drawIcon,
 	Config = ConfigData,
 	Premium = false,
+	KeyTier = "none",
+	LicenseTier = "none",
 }
 
 function Zenless:IsPremium()
-	return State.premium == true
+	return State.premium == true or self.KeyTier == "premium"
 end
 
 function Zenless:GetLicenseTier()
-	return State.licenseTier
+	return State.licenseTier or self.KeyTier or "none"
+end
+
+function Zenless:GetKeyTier()
+	return self:GetLicenseTier()
 end
 
 function Zenless:ApplyPremium(on, opts)
@@ -9202,6 +9297,9 @@ Zenless.Window = {
 	Destroy = destroyGui,
 	Unload = destroyGui,
 	Toggle = toggleWindow,
+	KeyTier = "none",
+	LicenseTier = "none",
+	Premium = false,
 	Show = function()
 		uiVisible = true
 		showWindow()
@@ -9232,6 +9330,17 @@ Zenless.Window = {
 	GetTabs = function()
 		return tabs
 	end,
+	-- Fluent-style: Window:AddTab(...) — this was missing and broke hub scripts
+	AddTab = function(_, config)
+		return createTab(config)
+	end,
+	CreateTab = function(_, config)
+		return createTab(config)
+	end,
+	SelectTab = function(_, tab)
+		switchTab(tab)
+		return tab
+	end,
 }
 
 function Zenless:KeySystem(opts)
@@ -9248,7 +9357,20 @@ function Zenless:KeySystem(opts)
 		return false
 	end
 	State.keyGateActive = false
-	return result and true or false
+	-- Truthy tier string ("standard"|"premium") or false
+	if result then
+		local tier = (type(result) == "string" and result) or State.licenseTier or "standard"
+		Zenless.KeyTier = tier
+		Zenless.LicenseTier = tier
+		Zenless.Premium = (tier == "premium")
+		if Zenless.Window then
+			Zenless.Window.KeyTier = tier
+			Zenless.Window.LicenseTier = tier
+			Zenless.Window.Premium = (tier == "premium")
+		end
+		return tier
+	end
+	return false
 end
 
 --[[
@@ -9280,6 +9402,16 @@ function Zenless:Boot(opts)
 		if not unlocked then
 			pcall(destroyGui)
 			return false
+		end
+		-- Sync tier onto library + window after unlock
+		local tier = (type(unlocked) == "string" and unlocked) or State.licenseTier or "standard"
+		Zenless.KeyTier = tier
+		Zenless.LicenseTier = tier
+		Zenless.Premium = (tier == "premium")
+		if Zenless.Window then
+			Zenless.Window.KeyTier = tier
+			Zenless.Window.LicenseTier = tier
+			Zenless.Window.Premium = (tier == "premium")
 		end
 		-- brief beat so key card can fade out
 		task.wait(0.2)
@@ -9364,6 +9496,29 @@ function Zenless:CreateWindow(config)
 	end
 	if config.SizePreset then
 		pcall(function() setSizePreset(config.SizePreset) end)
+	end
+	-- Ensure Window always exposes tab API (Fluent-style Window:AddTab)
+	local W = Zenless.Window
+	if type(W) == "table" then
+		if type(W.AddTab) ~= "function" then
+			W.AddTab = function(_, cfg) return createTab(cfg) end
+		end
+		if type(W.CreateTab) ~= "function" then
+			W.CreateTab = W.AddTab
+		end
+		if type(W.SelectTab) ~= "function" then
+			W.SelectTab = function(_, tab) switchTab(tab); return tab end
+		end
+		W.KeyTier = Zenless.KeyTier or State.licenseTier or W.KeyTier or "none"
+		W.LicenseTier = W.KeyTier
+		W.Premium = Zenless.Premium == true or W.KeyTier == "premium"
+	end
+	-- Make sure shell is visible after CreateWindow (Boot/defer may have left it hidden)
+	if not State.keyGateActive then
+		pcall(function()
+			uiVisible = true
+			if showWindow then showWindow() end
+		end)
 	end
 	return Zenless.Window
 end
