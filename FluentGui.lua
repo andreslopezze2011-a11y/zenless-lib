@@ -1963,7 +1963,7 @@ make("TextLabel", {
 	Size = UDim2.fromOffset(48, MINI_H),
 	Position = UDim2.fromOffset(118, 0),
 	Font = Enum.Font.Gotham,
-	Text = "v6",
+	Text = "v" .. LIBRARY_VERSION,
 	TextSize = 12,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
@@ -5765,13 +5765,14 @@ bindTabAPI = function(tab)
 		return V5.createInfoGrid(self, items)
 	end
 	function tab:AddActionRow(actions)
-		-- Accept both { text, callback, primary } and { Title, Callback, Primary }
+		-- Accept both { text, callback, primary, danger } and { Title, Callback, Primary, Danger }
 		local normalized = {}
 		for i, a in ipairs(actions or {}) do
 			normalized[i] = {
 				text = a.text or a.Title or a.Label or ("Action " .. i),
 				callback = a.callback or a.Callback,
 				primary = a.primary or a.Primary,
+				danger = a.danger or a.Danger,
 			}
 		end
 		return V5.createActionRow(self, normalized)
