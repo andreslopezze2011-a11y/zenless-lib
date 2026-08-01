@@ -1,5 +1,5 @@
 --[[
-	ZENLESS 0.0.1 — ScriptHub GUI Library 
+	ZENLESS 0.0.1 — ScriptHub GUI Library (black / grey / silver)
 
 	GitHub:
 		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
@@ -48,7 +48,7 @@ local CONFIG_FILE = "zenless_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
--- ============ THEME ============
+-- ============ THEME (black / grey / silver) ============
 local Theme = {
 	Background   = Color3.fromRGB(14, 14, 16),
 	Sidebar      = Color3.fromRGB(18, 18, 20),
@@ -101,7 +101,7 @@ local Anim = {
 local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
-	DisableParticles = true, -- Executor-safe boot; enable later via SetFlag
+	DisableParticles = true, -- KRNL-safe boot; enable later via SetFlag
 	DisableGrid = true,
 	DisableDust = true,
 	LazyTabs = false,
@@ -661,7 +661,7 @@ local IconNames = {
 }
 
 --[[
-
+	Rounded metallic rim + traveling silver sheen.
 	Uses UICorner + UIStroke (no square edge rectangles).
 ]]
 local function attachPerimeterLight(parent, opts)
@@ -1942,11 +1942,16 @@ local dotGlow = make("Frame", {
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
+-- Title + version sit side-by-side (version was previously fixed at x=118 for "ZENLESS" only)
+local TITLE_LEFT = 36
+local TITLE_RIGHT_RESERVE = 230 -- fps / bell / win controls
+local VERSION_GAP = 8
+
 local titleLabel = make("TextLabel", {
 	Name = "Title",
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, -230, 1, 0),
-	Position = UDim2.fromOffset(36, 0),
+	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.GothamBold,
 	Text = "ZENLESS",
 	TextSize = 15,
@@ -1957,17 +1962,46 @@ local titleLabel = make("TextLabel", {
 })
 titleLabel.Parent = titleBar
 
-make("TextLabel", {
+local versionLabel = make("TextLabel", {
+	Name = "Version",
 	BackgroundTransparency = 1,
 	Size = UDim2.fromOffset(48, MINI_H),
-	Position = UDim2.fromOffset(118, 0),
+	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.Gotham,
 	Text = "v" .. LIBRARY_VERSION,
 	TextSize = 12,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 3,
-}).Parent = titleBar
+	ZIndex = 4,
+})
+versionLabel.Parent = titleBar
+
+local function layoutTitleVersion()
+	local barW = titleBar.AbsoluteSize.X
+	if barW < 1 then return end
+	local verW = math.max(TextService:GetTextSize(
+		versionLabel.Text,
+		versionLabel.TextSize,
+		versionLabel.Font,
+		Vector2.new(10000, MINI_H)
+	).X, 28)
+	local maxTitleW = math.max(40, barW - TITLE_LEFT - TITLE_RIGHT_RESERVE - VERSION_GAP - verW)
+	local naturalW = TextService:GetTextSize(
+		titleLabel.Text,
+		titleLabel.TextSize,
+		titleLabel.Font,
+		Vector2.new(10000, MINI_H)
+	).X
+	local titleW = math.min(naturalW, maxTitleW)
+	titleLabel.Size = UDim2.fromOffset(titleW, MINI_H)
+	titleLabel.Position = UDim2.fromOffset(TITLE_LEFT, 0)
+	versionLabel.Size = UDim2.fromOffset(verW + 2, MINI_H)
+	versionLabel.Position = UDim2.fromOffset(TITLE_LEFT + titleW + VERSION_GAP, 0)
+end
+
+titleLabel:GetPropertyChangedSignal("Text"):Connect(layoutTitleVersion)
+titleBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutTitleVersion)
+task.defer(layoutTitleVersion)
 
 -- Right chrome spacing (from right edge): controls → gap → bell → gap → fps
 -- winControls width 70 @ -12 → occupies [W-82, W-12]
@@ -9375,6 +9409,7 @@ Zenless.Window = {
 	end,
 	SetTitle = function(text)
 		titleLabel.Text = text
+		layoutTitleVersion()
 	end,
 	SetToggleKey = function(key)
 		toggleKey = key
@@ -9544,6 +9579,7 @@ function Zenless:CreateWindow(config)
 	if config.Subtitle or config.SubTitle then
 		titleLabel.Text = config.Title or titleLabel.Text
 	end
+	layoutTitleVersion()
 	if config.MinimizeKey or config.ToggleKey then
 		Zenless.Window.SetToggleKey(config.MinimizeKey or config.ToggleKey)
 	end
