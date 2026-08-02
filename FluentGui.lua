@@ -1,29 +1,29 @@
 --[[
-	ZENLESS 0.0.1 — ScriptHub GUI Library (black / grey / silver)
+	EXODUS 0.0.1 — ScriptHub GUI Library (black / grey / silver)
 
 	GitHub:
 		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
 
 	Load (executor):
-		getgenv().ZENLESS_DEFER_BOOT = true
-		local Zenless = loadstring(game:HttpGet("https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua"))()
+		getgenv().EXODUS_DEFER_BOOT = true
+		local Exodus = loadstring(game:HttpGet("https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua"))()
 		-- or: loadstring(readfile("FluentGui.lua"))()
 
 	Boot ScriptHub:
-		Zenless:Boot({
+		Exodus:Boot({
 			KeySystem = {
-				Title = "ZENLESS",
+				Title = "EXODUS",
 				Subtitle = "ScriptHub Access",
-				StandardKeys = { "12345678", "ZENLESS-HUB" }, -- or Keys = {...}
-				PremiumKeys = { "VIP-ACCESS", "PREMIUM-ZENLESS", "ZENLESS-PRO" },
+				StandardKeys = { "12345678", "EXODUS-HUB" }, -- or Keys = {...}
+				PremiumKeys = { "VIP-ACCESS", "PREMIUM-EXODUS", "EXODUS-PRO" },
 				SaveKey = true,
 				KeyLink = "https://discord.gg/",
 			},
 			Loader = true,
 		})
-		local Window = Zenless:CreateWindow({ Title = "ZENLESS ScriptHub" })
-		local Tab = Window:AddTab({ Title = "Combat", Icon = "target" }) -- or Zenless:AddTab
-		-- Tier after unlock: Zenless.KeyTier / Window.KeyTier / Zenless:GetLicenseTier()
+		local Window = Exodus:CreateWindow({ Title = "EXODUS ScriptHub" })
+		local Tab = Window:AddTab({ Title = "Combat", Icon = "target" }) -- or Exodus:AddTab
+		-- Tier after unlock: Exodus.KeyTier / Window.KeyTier / Exodus:GetLicenseTier()
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -44,7 +44,7 @@ end
 
 local LIBRARY_VERSION = "0.0.1"
 local CONFIG_VERSION = 6
-local CONFIG_FILE = "zenless_config.json"
+local CONFIG_FILE = "exodus_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
@@ -192,7 +192,7 @@ local function safeCall(fn, ...)
 	if not ok then
 		table.insert(State.consoleLog, 1, { t = os.clock(), level = "error", msg = tostring(a) })
 		while #State.consoleLog > 200 do table.remove(State.consoleLog) end
-		warn("[ZENLESS]", a)
+		warn("[EXODUS]", a)
 	end
 	return ok, a, b, c
 end
@@ -1226,7 +1226,7 @@ do
 	end
 end
 
-print("[ZENLESS] loaded")
+print("[EXODUS] loaded")
 
 local WIN_W, WIN_H, MINI_H = 610, 430, 48
 local minimized = false -- early: resize pads / title layout / shell helpers share this
@@ -1497,7 +1497,7 @@ make("TextLabel", {
 	Size = UDim2.new(0.6, 0, 1, 0),
 	Position = UDim2.fromOffset(20, 0),
 	Font = Enum.Font.GothamBold,
-	Text = "ZENLESS",
+	Text = "EXODUS",
 	TextSize = 18,
 	TextColor3 = Color3.fromRGB(255, 255, 255),
 	TextXAlignment = Enum.TextXAlignment.Left,
@@ -1885,7 +1885,7 @@ playLoader = function()
 
 	loaderFinished = true
 	setLoaderStage(8)
-	loaderStatus.Text = "Launching ZENLESS…"
+	loaderStatus.Text = "Launching EXODUS…"
 	loaderPct.Text = "100%"
 	loaderDetail.Text = "2450 KB / 2450 KB"
 	loaderSub.Text = "ready"
@@ -1944,7 +1944,7 @@ local dotGlow = make("Frame", {
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
--- Title + version sit side-by-side (version was previously fixed at x=118 for "ZENLESS" only)
+-- Title + version sit side-by-side (version was previously fixed at x=118 for "EXODUS" only)
 local TITLE_LEFT = 36
 local TITLE_RIGHT_RESERVE = 230 -- fps / bell / win controls
 local VERSION_GAP = 8
@@ -1955,7 +1955,7 @@ local titleLabel = make("TextLabel", {
 	Size = UDim2.new(1, -230, 1, 0),
 	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.GothamBold,
-	Text = "ZENLESS",
+	Text = "EXODUS",
 	TextSize = 15,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
@@ -2740,6 +2740,22 @@ local statusClockLabel = make("TextLabel", {
 })
 statusClockLabel.Parent = contentFooter
 
+-- ====== WATERMARK: UI made by @rebornlrd ======
+local watermarkLabel = make("TextLabel", {
+	BackgroundTransparency = 1,
+	Size = UDim2.new(0.25, -10, 1, 0),
+	Position = UDim2.new(0.75, 0, 0, 0),
+	Font = Enum.Font.Gotham,
+	Text = "UI made by @rebornlrd",
+	TextSize = 9,
+	TextColor3 = Theme.SubText,
+	TextTransparency = 0.5,
+	TextXAlignment = Enum.TextXAlignment.Right,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	ZIndex = 4,
+})
+watermarkLabel.Parent = contentFooter
+
 task.spawn(function()
 	while statusClockLabel.Parent do
 		statusClockLabel.Text = os.date("%H:%M:%S")
@@ -2991,7 +3007,7 @@ notify = function(title, body, kind, duration, opts)
 			Size = UDim2.new(1, -100, 0, 14),
 			Position = UDim2.fromOffset(52, 28),
 			Font = Enum.Font.Gotham,
-			Text = "ZENLESS",
+			Text = "EXODUS",
 			TextSize = 10,
 			TextColor3 = Theme.AccentSoft,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -4763,7 +4779,7 @@ end
 -- Soft warm silver (premium reads cleaner than standard, not flashy gold)
 local PREMIUM_ACCENT = Color3.fromRGB(214, 204, 168)
 local STANDARD_ACCENT = Color3.fromRGB(198, 198, 208)
-local Zenless -- forward declare for applyPremiumMode sync
+local Exodus -- forward declare for applyPremiumMode sync
 
 local function ensurePremiumBadge()
 	if State.premiumBadge and State.premiumBadge.Parent then return State.premiumBadge end
@@ -4797,8 +4813,8 @@ local function applyPremiumMode(on, opts)
 	State.premium = on
 	Flags.PremiumMode = on
 	State.licenseTier = on and "premium" or (opts.tier or "standard")
-	if type(Zenless) == "table" then
-		Zenless.Premium = on
+	if type(Exodus) == "table" then
+		Exodus.Premium = on
 	end
 
 	local badge = ensurePremiumBadge()
@@ -6190,7 +6206,7 @@ end)
 local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
 (function()
--- ============ ZENLESS V6 CHUNK (splice into FluentGui.lua, same scope) ============
+-- ============ EXODUS V6 CHUNK (splice into FluentGui.lua, same scope) ============
 -- Place AFTER: local minimized / window shell / createTab / notify / tabs exist.
 -- bindTabAPI / createTab should call enhanceTab(tab) — wrapper below also does this.
 
@@ -7922,7 +7938,7 @@ local function hotReload()
 	return false
 end
 
--- ---- 11) Easter egg: typed "zenless" ----
+-- ---- 11) Easter egg: typed "exodus" ----
 do
 	local buf = ""
 	UserInputService.InputBegan:Connect(function(input, processed)
@@ -7930,12 +7946,12 @@ do
 		if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 		local name = input.KeyCode.Name
 		if #name == 1 then
-			buf = (buf .. name:lower()):sub(-7)
-			if buf == "zenless" then
+			buf = (buf .. name:lower()):sub(-6)
+			if buf == "exodus" then
 				buf = ""
 				pcall(function()
 					setAccent(Color3.fromRGB(255, 210, 80))
-					notify("ZENLESS", "You found the easter egg.", "success", 3.5)
+					notify("EXODUS", "You found the easter egg.", "success", 3.5)
 					if type(celebrateOpen) == "function" then
 						celebrateOpen(window)
 					end
@@ -7956,7 +7972,7 @@ createFOVOverlay = function(opts)
 	parent = parent or CoreGui
 
 	local gui = Instance.new("ScreenGui")
-	gui.Name = opts.Name or "ZenlessFOV"
+	gui.Name = opts.Name or "ExodusFOV"
 	gui.IgnoreGuiInset = true
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -8282,31 +8298,31 @@ bindLive = function(interval, fn)
 	return entry
 end
 
-applyV6PublicAPI = function(Zenless)
-	if type(Zenless) ~= "table" then return Zenless end
-	Zenless.Version = LIBRARY_VERSION or Zenless.Version or "0.0.1"
-	Zenless.Flags = Flags
-	Zenless.IsPremium = function() return State.premium == true end
-	Zenless.GetLicenseTier = function() return State.licenseTier end
-	Zenless.ApplyPremium = function(self, on, o)
+applyV6PublicAPI = function(Exodus)
+	if type(Exodus) ~= "table" then return Exodus end
+	Exodus.Version = LIBRARY_VERSION or Exodus.Version or "0.0.1"
+	Exodus.Flags = Flags
+	Exodus.IsPremium = function() return State.premium == true end
+	Exodus.GetLicenseTier = function() return State.licenseTier end
+	Exodus.ApplyPremium = function(self, on, o)
 		local r = applyPremiumMode(on, o)
 		if type(self) == "table" then self.Premium = State.premium end
 		return r
 	end
-	Zenless.SetPremium = function(self, on, o)
+	Exodus.SetPremium = function(self, on, o)
 		local r = applyPremiumMode(on, o)
 		if type(self) == "table" then self.Premium = State.premium end
 		return r
 	end
-	Zenless.SetFlag = function(_, name, value) return setFlag(name, value) end
-	Zenless.GetFlag = function(_, name) return Flags[name] end
-	Zenless.SaveConfig = function() return saveConfigFile() end
-	Zenless.LoadConfig = function() return loadConfigFile() end
-	Zenless.ExportConfig = function()
+	Exodus.SetFlag = function(_, name, value) return setFlag(name, value) end
+	Exodus.GetFlag = function(_, name) return Flags[name] end
+	Exodus.SaveConfig = function() return saveConfigFile() end
+	Exodus.LoadConfig = function() return loadConfigFile() end
+	Exodus.ExportConfig = function()
 		local s = encodeJson(ConfigData)
 		return s and b64encode(s) or nil
 	end
-	Zenless.ImportConfig = function(_, b64)
+	Exodus.ImportConfig = function(_, b64)
 		local raw = b64decode(tostring(b64 or ""))
 		local data = decodeJson(raw)
 		if type(data) == "table" then
@@ -8316,45 +8332,45 @@ applyV6PublicAPI = function(Zenless)
 		end
 		return false
 	end
-	Zenless.GetNotificationHistory = function() return State.notifHistory end
-	Zenless.ShowConfirm = showConfirmModal
-	Zenless.Confirm = showConfirmModal
-	Zenless.NotifyProgress = NotifyProgress
-	Zenless.SetNotificationMode = SetNotificationMode
-	Zenless.PushNotifHistory = pushNotifHistory
-	Zenless.CreateBellAndHistory = createBellAndHistory
-	Zenless.ApplyLightMode = applyLightMode
-	Zenless.ExportTheme = exportTheme
-	Zenless.ImportTheme = importTheme
-	Zenless.SetUiScale = setUiScale
-	Zenless.RandomTheme = randomTheme
-	Zenless.DailyAccent = dailyAccent
-	Zenless.ToggleInspector = toggleInspector
-	Zenless.AppendConsole = appendConsole
-	Zenless.HotReload = hotReload
-	Zenless.EnhanceTab = enhanceTab
-	Zenless.CloseTab = closeTab
-	Zenless.MoveTab = moveTab
-	Zenless.CycleTab = cycleTab
-	Zenless.DetachTab = detachTab
-	Zenless.ToggleFavorite = toggleFavorite
-	Zenless.ShowTabContextMenu = showTabContextMenu
-	Zenless.CreateFOVOverlay = function(_, o) return createFOVOverlay(o) end
-	Zenless.CreateFOV = function(_, o) return createFOVOverlay(o) end
-	Zenless.SetControl = function(_, flag, value, silent) return setControlByFlag(flag, value, silent) end
-	Zenless.GetControl = function(_, flag)
+	Exodus.GetNotificationHistory = function() return State.notifHistory end
+	Exodus.ShowConfirm = showConfirmModal
+	Exodus.Confirm = showConfirmModal
+	Exodus.NotifyProgress = NotifyProgress
+	Exodus.SetNotificationMode = SetNotificationMode
+	Exodus.PushNotifHistory = pushNotifHistory
+	Exodus.CreateBellAndHistory = createBellAndHistory
+	Exodus.ApplyLightMode = applyLightMode
+	Exodus.ExportTheme = exportTheme
+	Exodus.ImportTheme = importTheme
+	Exodus.SetUiScale = setUiScale
+	Exodus.RandomTheme = randomTheme
+	Exodus.DailyAccent = dailyAccent
+	Exodus.ToggleInspector = toggleInspector
+	Exodus.AppendConsole = appendConsole
+	Exodus.HotReload = hotReload
+	Exodus.EnhanceTab = enhanceTab
+	Exodus.CloseTab = closeTab
+	Exodus.MoveTab = moveTab
+	Exodus.CycleTab = cycleTab
+	Exodus.DetachTab = detachTab
+	Exodus.ToggleFavorite = toggleFavorite
+	Exodus.ShowTabContextMenu = showTabContextMenu
+	Exodus.CreateFOVOverlay = function(_, o) return createFOVOverlay(o) end
+	Exodus.CreateFOV = function(_, o) return createFOVOverlay(o) end
+	Exodus.SetControl = function(_, flag, value, silent) return setControlByFlag(flag, value, silent) end
+	Exodus.GetControl = function(_, flag)
 		local api = State.controlRegistry[flag]
 		if api and api.Get then return api.Get() end
 		return ConfigData.values[flag]
 	end
-	Zenless.ApplyControls = function(_, map, silent) return applyControlsMap(map, silent) end
-	Zenless.BindLive = function(_, interval, fn)
+	Exodus.ApplyControls = function(_, map, silent) return applyControlsMap(map, silent) end
+	Exodus.BindLive = function(_, interval, fn)
 		if type(interval) == "function" then
 			return bindLive(0.25, interval)
 		end
 		return bindLive(interval, fn)
 	end
-	Zenless.OnUnload = function(_, fn)
+	Exodus.OnUnload = function(_, fn)
 		if type(fn) ~= "function" then return end
 		table.insert(State.unloadHooks, fn)
 		return function()
@@ -8366,30 +8382,30 @@ applyV6PublicAPI = function(Zenless)
 			end
 		end
 	end
-	Zenless.GetControls = function() return State.controlRegistry end
-	Zenless.Undo = function()
+	Exodus.GetControls = function() return State.controlRegistry end
+	Exodus.Undo = function()
 		local e = table.remove(State.undoStack)
 		if e then table.insert(State.redoStack, e); return e end
 	end
-	Zenless.Redo = function()
+	Exodus.Redo = function()
 		local e = table.remove(State.redoStack)
 		if e then table.insert(State.undoStack, e); return e end
 	end
 
 	-- component factories (tab, ...)
-	Zenless.CreateRadioGroup = createRadioGroup
-	Zenless.CreateCircularProgress = createCircularProgress
-	Zenless.CreateTagsInput = createTagsInput
-	Zenless.CreateRichText = createRichText
-	Zenless.CreateTable = createTable
-	Zenless.CreateTreeView = createTreeView
-	Zenless.CreateGraph = createGraph
-	Zenless.CreateDateTimePicker = createDateTimePicker
-	Zenless.CreateImageViewer = createImageViewer
-	Zenless.CreateFileBrowser = createFileBrowser
+	Exodus.CreateRadioGroup = createRadioGroup
+	Exodus.CreateCircularProgress = createCircularProgress
+	Exodus.CreateTagsInput = createTagsInput
+	Exodus.CreateRichText = createRichText
+	Exodus.CreateTable = createTable
+	Exodus.CreateTreeView = createTreeView
+	Exodus.CreateGraph = createGraph
+	Exodus.CreateDateTimePicker = createDateTimePicker
+	Exodus.CreateImageViewer = createImageViewer
+	Exodus.CreateFileBrowser = createFileBrowser
 
-	Zenless.Window = Zenless.Window or {}
-	local W = Zenless.Window
+	Exodus.Window = Exodus.Window or {}
+	local W = Exodus.Window
 	W.Minimize = function(state)
 		if state == nil then return minimizeWindow() end
 		if (state and true or false) ~= minimized then minimizeWindow() end
@@ -8481,13 +8497,13 @@ applyV6PublicAPI = function(Zenless)
 		end
 	end)
 
-	return Zenless
+	return Exodus
 end
 
--- Auto-apply if Zenless table already exists in this scope (after public library block)
+-- Auto-apply if Exodus table already exists in this scope (after public library block)
 pcall(function()
-	if type(Zenless) == "table" then
-		applyV6PublicAPI(Zenless)
+	if type(Exodus) == "table" then
+		applyV6PublicAPI(Exodus)
 	end
 end)
 
@@ -8497,11 +8513,11 @@ end)()
 -- ============ KEY SYSTEM (Premium ScriptHub Gate) ============
 local function runKeySystem(opts)
 	opts = type(opts) == "table" and opts or {}
-	local title = opts.Title or "ZENLESS"
+	local title = opts.Title or "EXODUS"
 	local subtitle = opts.Subtitle or opts.SubTitle or "ScriptHub Access"
 	local note = opts.Note or opts.Description -- filled after keys are parsed
 	local saveKey = opts.SaveKey ~= false
-	local fileName = opts.FileName or opts.KeyFile or "zenless_key.txt"
+	local fileName = opts.FileName or opts.KeyFile or "exodus_key.txt"
 	local keyLink = opts.KeyLink or opts.Discord or opts.Link
 	local onSuccess = opts.Callback or opts.OnSuccess
 	local onFail = opts.OnFail
@@ -8688,14 +8704,14 @@ local function runKeySystem(opts)
 		tier = tier or getTier(raw) or "standard"
 		State.licenseTier = tier
 		pcall(function()
-			if type(Zenless) == "table" then
-				Zenless.KeyTier = tier
-				Zenless.LicenseTier = tier
-				Zenless.Premium = (tier == "premium")
-				if type(Zenless.Window) == "table" then
-					Zenless.Window.KeyTier = tier
-					Zenless.Window.LicenseTier = tier
-					Zenless.Window.Premium = (tier == "premium")
+			if type(Exodus) == "table" then
+				Exodus.KeyTier = tier
+				Exodus.LicenseTier = tier
+				Exodus.Premium = (tier == "premium")
+				if type(Exodus.Window) == "table" then
+					Exodus.Window.KeyTier = tier
+					Exodus.Window.LicenseTier = tier
+					Exodus.Window.Premium = (tier == "premium")
 				end
 			end
 		end)
@@ -9147,7 +9163,7 @@ local function runKeySystem(opts)
 		Size = UDim2.new(1, -44, 0, 14),
 		Position = UDim2.fromOffset(22, footerY),
 		Font = Enum.Font.Gotham,
-		Text = "ZENLESS v" .. tostring(LIBRARY_VERSION) .. "  ·  Secure key gate",
+		Text = "EXODUS v" .. tostring(LIBRARY_VERSION) .. "  ·  Secure key gate",
 		TextSize = 10,
 		TextColor3 = Color3.fromRGB(100, 100, 110),
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -9386,8 +9402,8 @@ local function runKeySystem(opts)
 end
 
 -- ============ PUBLIC LIBRARY ============
-Zenless = {
-	Name = "ZENLESS",
+Exodus = {
+	Name = "EXODUS",
 	Version = LIBRARY_VERSION,
 	Theme = Theme,
 	Flags = Flags,
@@ -9401,25 +9417,25 @@ Zenless = {
 	LicenseTier = "none",
 }
 
-function Zenless:IsPremium()
+function Exodus:IsPremium()
 	return State.premium == true or self.KeyTier == "premium"
 end
 
-function Zenless:GetLicenseTier()
+function Exodus:GetLicenseTier()
 	return State.licenseTier or self.KeyTier or "none"
 end
 
-function Zenless:GetKeyTier()
+function Exodus:GetKeyTier()
 	return self:GetLicenseTier()
 end
 
-function Zenless:ApplyPremium(on, opts)
+function Exodus:ApplyPremium(on, opts)
 	local result = applyPremiumMode(on, opts)
 	self.Premium = State.premium
 	return result
 end
 
-function Zenless:Notify(opts)
+function Exodus:Notify(opts)
 	if type(opts) == "string" then
 		return notify(opts, "", "info", 3.2, nil)
 	end
@@ -9433,37 +9449,37 @@ function Zenless:Notify(opts)
 	)
 end
 
-function Zenless:ClearNotifications()
+function Exodus:ClearNotifications()
 	for i = #activeNotifs, 1, -1 do
 		dismissNotif(activeNotifs[i])
 	end
 end
 
-function Zenless:SetAccent(color)
+function Exodus:SetAccent(color)
 	setAccent(color)
 end
 
-function Zenless:AddTab(config)
+function Exodus:AddTab(config)
 	return createTab(config)
 end
 
-function Zenless:SelectTab(tab)
+function Exodus:SelectTab(tab)
 	switchTab(tab)
 end
 
-function Zenless:GetTabs()
+function Exodus:GetTabs()
 	return tabs
 end
 
-function Zenless:Unload()
+function Exodus:Unload()
 	destroyGui()
 	pcall(function()
-		if getgenv().Zenless == Zenless then getgenv().Zenless = nil end
-		if getgenv().Fluent == Zenless then getgenv().Fluent = nil end
+		if getgenv().Exodus == Exodus then getgenv().Exodus = nil end
+		if getgenv().Fluent == Exodus then getgenv().Fluent = nil end
 	end)
 end
 
-function Zenless:OnUnload(fn)
+function Exodus:OnUnload(fn)
 	if type(fn) ~= "function" then return end
 	table.insert(State.unloadHooks, fn)
 	return function()
@@ -9476,32 +9492,32 @@ function Zenless:OnUnload(fn)
 	end
 end
 
-function Zenless:CreateFOVOverlay(opts)
+function Exodus:CreateFOVOverlay(opts)
 	return createFOVOverlay(opts)
 end
 
-function Zenless:SetControl(flag, value, silent)
+function Exodus:SetControl(flag, value, silent)
 	return setControlByFlag(flag, value, silent)
 end
 
-function Zenless:ApplyControls(map, silent)
+function Exodus:ApplyControls(map, silent)
 	return applyControlsMap(map, silent)
 end
 
-function Zenless:BindLive(interval, fn)
+function Exodus:BindLive(interval, fn)
 	if type(interval) == "function" then
 		return bindLive(0.25, interval)
 	end
 	return bindLive(interval, fn)
 end
 
-function Zenless:GetControl(flag)
+function Exodus:GetControl(flag)
 	local api = State.controlRegistry[flag]
 	if api and api.Get then return api.Get() end
 	return ConfigData.values[flag]
 end
 
-Zenless.Window = {
+Exodus.Window = {
 	TitleLabel = titleLabel,
 	Destroy = destroyGui,
 	Unload = destroyGui,
@@ -9553,11 +9569,11 @@ Zenless.Window = {
 	end,
 }
 
-function Zenless:KeySystem(opts)
+function Exodus:KeySystem(opts)
 	local ok, result = pcall(runKeySystem, opts)
 	if not ok then
 		State.keyGateActive = false
-		warn("[ZENLESS] KeySystem error: ", result)
+		warn("[EXODUS] KeySystem error: ", result)
 		local skip = type(opts) == "table" and (opts.SkipShow or opts.ThenLoader)
 		if not skip then
 			pcall(function()
@@ -9570,13 +9586,13 @@ function Zenless:KeySystem(opts)
 	-- Truthy tier string ("standard"|"premium") or false
 	if result then
 		local tier = (type(result) == "string" and result) or State.licenseTier or "standard"
-		Zenless.KeyTier = tier
-		Zenless.LicenseTier = tier
-		Zenless.Premium = (tier == "premium")
-		if Zenless.Window then
-			Zenless.Window.KeyTier = tier
-			Zenless.Window.LicenseTier = tier
-			Zenless.Window.Premium = (tier == "premium")
+		Exodus.KeyTier = tier
+		Exodus.LicenseTier = tier
+		Exodus.Premium = (tier == "premium")
+		if Exodus.Window then
+			Exodus.Window.KeyTier = tier
+			Exodus.Window.LicenseTier = tier
+			Exodus.Window.Premium = (tier == "premium")
 		end
 		return tier
 	end
@@ -9585,9 +9601,9 @@ end
 
 --[[
 	Boot sequence: KeySystem (optional) → Loader (optional) → main GUI
-	Use with getgenv().ZENLESS_DEFER_BOOT = true so auto-boot does not race.
+	Use with getgenv().EXODUS_DEFER_BOOT = true so auto-boot does not race.
 ]]
-function Zenless:Boot(opts)
+function Exodus:Boot(opts)
 	opts = type(opts) == "table" and opts or {}
 	State.keyGateActive = false
 
@@ -9608,20 +9624,20 @@ function Zenless:Boot(opts)
 		-- Don't open GUI yet — loader runs next
 		keyOpts.SkipShow = true
 		keyOpts.ThenLoader = true
-		local unlocked = Zenless:KeySystem(keyOpts)
+		local unlocked = Exodus:KeySystem(keyOpts)
 		if not unlocked then
 			pcall(destroyGui)
 			return false
 		end
 		-- Sync tier onto library + window after unlock
 		local tier = (type(unlocked) == "string" and unlocked) or State.licenseTier or "standard"
-		Zenless.KeyTier = tier
-		Zenless.LicenseTier = tier
-		Zenless.Premium = (tier == "premium")
-		if Zenless.Window then
-			Zenless.Window.KeyTier = tier
-			Zenless.Window.LicenseTier = tier
-			Zenless.Window.Premium = (tier == "premium")
+		Exodus.KeyTier = tier
+		Exodus.LicenseTier = tier
+		Exodus.Premium = (tier == "premium")
+		if Exodus.Window then
+			Exodus.Window.KeyTier = tier
+			Exodus.Window.LicenseTier = tier
+			Exodus.Window.Premium = (tier == "premium")
 		end
 		-- brief beat so key card can fade out
 		task.wait(0.2)
@@ -9631,7 +9647,7 @@ function Zenless:Boot(opts)
 	if wantLoader == nil then
 		local noLoader = false
 		pcall(function()
-			noLoader = getgenv().ZENLESS_NO_LOADER == true
+			noLoader = getgenv().EXODUS_NO_LOADER == true
 		end)
 		wantLoader = not noLoader
 	end
@@ -9679,12 +9695,12 @@ function Zenless:Boot(opts)
 	return true
 end
 
-function Zenless:CreateWindow(config)
+function Exodus:CreateWindow(config)
 	config = config or {}
 	local keyOpts = config.KeySettings or (type(config.KeySystem) == "table" and config.KeySystem) or nil
 	local wantsBoot = keyOpts ~= nil or config.Loader == true
 	if wantsBoot then
-		local ok = Zenless:Boot({
+		local ok = Exodus:Boot({
 			KeySystem = keyOpts,
 			Loader = config.Loader,
 		})
@@ -9700,7 +9716,7 @@ function Zenless:CreateWindow(config)
 	end
 	layoutTitleVersion()
 	if config.MinimizeKey or config.ToggleKey then
-		Zenless.Window.SetToggleKey(config.MinimizeKey or config.ToggleKey)
+		Exodus.Window.SetToggleKey(config.MinimizeKey or config.ToggleKey)
 	end
 	if config.Accent then
 		setAccent(config.Accent)
@@ -9709,7 +9725,7 @@ function Zenless:CreateWindow(config)
 		pcall(function() setSizePreset(config.SizePreset) end)
 	end
 	-- Ensure Window always exposes tab API (Fluent-style Window:AddTab)
-	local W = Zenless.Window
+	local W = Exodus.Window
 	if type(W) == "table" then
 		if type(W.AddTab) ~= "function" then
 			W.AddTab = function(_, cfg) return createTab(cfg) end
@@ -9720,9 +9736,9 @@ function Zenless:CreateWindow(config)
 		if type(W.SelectTab) ~= "function" then
 			W.SelectTab = function(_, tab) switchTab(tab); return tab end
 		end
-		W.KeyTier = Zenless.KeyTier or State.licenseTier or W.KeyTier or "none"
+		W.KeyTier = Exodus.KeyTier or State.licenseTier or W.KeyTier or "none"
 		W.LicenseTier = W.KeyTier
-		W.Premium = Zenless.Premium == true or W.KeyTier == "premium"
+		W.Premium = Exodus.Premium == true or W.KeyTier == "premium"
 	end
 	-- Make sure shell is visible after CreateWindow (Boot/defer may have left it hidden)
 	if not State.keyGateActive then
@@ -9731,21 +9747,21 @@ function Zenless:CreateWindow(config)
 			if showWindow then showWindow() end
 		end)
 	end
-	return Zenless.Window
+	return Exodus.Window
 end
 
 -- Apply extended API surface (window helpers, notifs, theme, components on tabs)
 pcall(function()
-	applyV6PublicAPI(Zenless)
+	applyV6PublicAPI(Exodus)
 end)
 
 -- Aliases for Fluent-style loaders
-local Fluent = Zenless
-Zenless.Fluent = Zenless
+local Fluent = Exodus
+Exodus.Fluent = Exodus
 
 pcall(function()
-	getgenv().Zenless = Zenless
-	getgenv().Fluent = Zenless
+	getgenv().Exodus = Exodus
+	getgenv().Fluent = Exodus
 end)
 
 
@@ -9781,14 +9797,14 @@ local function envFlag(name)
 	return ok and val == true
 end
 
-local showDemo = envFlag("ZENLESS_DEMO")
-local skipLoader = envFlag("ZENLESS_NO_LOADER")
-local deferBoot = envFlag("ZENLESS_DEFER_BOOT") or envFlag("ZENLESS_MANUAL_BOOT")
+local showDemo = envFlag("EXODUS_DEMO")
+local skipLoader = envFlag("EXODUS_NO_LOADER")
+local deferBoot = envFlag("EXODUS_DEFER_BOOT") or envFlag("EXODUS_MANUAL_BOOT")
 -- Legacy: FLUENT_NO_DEMO forced library mode (now default). Ignore unless demo requested.
 
 local function bootLibrary(firstTab)
 	task.defer(function()
-		-- Consumer will call Zenless:Boot({ KeySystem=..., Loader=true }) → key → loader → GUI
+		-- Consumer will call Exodus:Boot({ KeySystem=..., Loader=true }) → key → loader → GUI
 		if deferBoot then
 			pcall(function()
 				root.Visible = false
@@ -9832,7 +9848,7 @@ local function bootLibrary(firstTab)
 		end
 		if firstTab then
 			task.wait(0.1)
-			Zenless:SelectTab(firstTab)
+			Exodus:SelectTab(firstTab)
 		end
 	end)
 end
@@ -9840,36 +9856,36 @@ end
 if not showDemo then
 	-- Library mode: empty shell — consumer scripts call AddTab / CreateWindow
 	bootLibrary(nil)
-	return Zenless
+	return Exodus
 end
 
--- ============ DEMO UI (opt-in: getgenv().ZENLESS_DEMO = true) ============
+-- ============ DEMO UI (opt-in: getgenv().EXODUS_DEMO = true) ============
 (function()
-local homeTab = Zenless:AddTab({ Title = "Home", Icon = "home", Description = "Overview", Color = Color3.fromRGB(198, 198, 208) })
-local playerTab = Zenless:AddTab({ Title = "Player", Icon = "user", Description = "Movement", Color = Color3.fromRGB(170, 170, 180) })
-local visualsTab = Zenless:AddTab({ Title = "Visuals", Icon = "eye", Description = "World", Color = Color3.fromRGB(210, 210, 220) })
-local extrasTab = Zenless:AddTab({ Title = "Extras", Icon = "star", Description = "Tools", Color = Color3.fromRGB(160, 160, 170) })
-local settingsTab = Zenless:AddTab({ Title = "Settings", Icon = "settings", Description = "Options", Color = Color3.fromRGB(140, 140, 150) })
+local homeTab = Exodus:AddTab({ Title = "Home", Icon = "home", Description = "Overview", Color = Color3.fromRGB(198, 198, 208) })
+local playerTab = Exodus:AddTab({ Title = "Player", Icon = "user", Description = "Movement", Color = Color3.fromRGB(170, 170, 180) })
+local visualsTab = Exodus:AddTab({ Title = "Visuals", Icon = "eye", Description = "World", Color = Color3.fromRGB(210, 210, 220) })
+local extrasTab = Exodus:AddTab({ Title = "Extras", Icon = "star", Description = "Tools", Color = Color3.fromRGB(160, 160, 170) })
+local settingsTab = Exodus:AddTab({ Title = "Settings", Icon = "settings", Description = "Options", Color = Color3.fromRGB(140, 140, 150) })
 
 homeTab:AddSection("WELCOME")
-homeTab:AddParagraph("ZENLESS",
-	"Library mode is default. Set getgenv().ZENLESS_DEMO = true before load to see this showcase.")
+homeTab:AddParagraph("EXODUS",
+	"Library mode is default. Set getgenv().EXODUS_DEMO = true before load to see this showcase.")
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v0.0.1", "ZENLESS", "ScriptHub", "Silver" })
+homeTab:AddBadgeRow({ "v0.0.1", "EXODUS", "ScriptHub", "Silver" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
 	Primary = true,
 	Callback = function()
-		Zenless:Notify({ Title = "Info", Content = "Informational message.", Type = "info", Duration = 2.5 })
+		Exodus:Notify({ Title = "Info", Content = "Informational message.", Type = "info", Duration = 2.5 })
 		task.wait(0.15)
-		Zenless:Notify({ Title = "Success", Content = "That worked.", Type = "success", Duration = 2.5 })
+		Exodus:Notify({ Title = "Success", Content = "That worked.", Type = "success", Duration = 2.5 })
 		task.wait(0.15)
-		Zenless:Notify({ Title = "Warning", Content = "Something to watch.", Type = "warning", Duration = 2.5 })
+		Exodus:Notify({ Title = "Warning", Content = "Something to watch.", Type = "warning", Duration = 2.5 })
 		task.wait(0.15)
-		Zenless:Notify({ Title = "Error", Content = "Something failed (demo).", Type = "error", Duration = 2.5 })
+		Exodus:Notify({ Title = "Error", Content = "Something failed (demo).", Type = "error", Duration = 2.5 })
 	end,
 })
 homeTab:AddHotkeyHint({ "RightShift" }, "Toggle window visibility")
@@ -9912,7 +9928,7 @@ playerTab:AddButton({
 	Callback = function()
 		walkSlider.Set(16)
 		jumpSlider.Set(50)
-		Zenless:Notify({ Title = "Player", Content = "Movement reset.", Type = "success", Duration = 2 })
+		Exodus:Notify({ Title = "Player", Content = "Movement reset.", Type = "success", Duration = 2 })
 	end,
 })
 
@@ -9944,16 +9960,16 @@ visualsTab:AddSlider({
 
 extrasTab:AddSection("LIBRARY API")
 extrasTab:AddInfoGrid({
-	{ label = "Version", value = Zenless.Version },
+	{ label = "Version", value = Exodus.Version },
 	{ label = "Accent", value = "Silver" },
 	{ label = "Mode", value = "Demo" },
-	{ label = "Brand", value = "ZENLESS" },
+	{ label = "Brand", value = "EXODUS" },
 })
 extrasTab:AddButton({
 	Title = "Celebrate",
 	Primary = true,
 	Callback = function()
-		Zenless.Window.Celebrate()
+		Exodus.Window.Celebrate()
 	end,
 })
 
@@ -9962,8 +9978,8 @@ settingsTab:AddKeybind({
 	Title = "Hide / show key",
 	Default = Enum.KeyCode.RightShift,
 	Callback = function(k)
-		Zenless.Window.SetToggleKey(k)
-		Zenless:Notify({ Title = "Keybind", Content = "Hide key is now " .. k.Name, Type = "success", Duration = 2 })
+		Exodus.Window.SetToggleKey(k)
+		Exodus:Notify({ Title = "Keybind", Content = "Hide key is now " .. k.Name, Type = "success", Duration = 2 })
 	end,
 })
 settingsTab:AddThemePresets()
@@ -9971,7 +9987,7 @@ settingsTab:AddColorpicker({
 	Title = "Accent color",
 	Default = Theme.Accent,
 	Callback = function(c)
-		Zenless:SetAccent(c)
+		Exodus:SetAccent(c)
 	end,
 })
 settingsTab:AddDivider()
@@ -9982,8 +9998,8 @@ settingsTab:AddButton({
 })
 
 bootLibrary(homeTab)
-Zenless:Notify({
-	Title = "ZENLESS",
+Exodus:Notify({
+	Title = "EXODUS",
 	Content = "Demo mode. See AimbotExample.lua for the full UI API showcase.",
 	Type = "success",
 	Duration = 3,
@@ -9991,4 +10007,4 @@ Zenless:Notify({
 
 end)()
 
-return Zenless
+return Exodus
