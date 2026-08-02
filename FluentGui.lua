@@ -1,5 +1,5 @@
 --[[
-	EXODUS 0.0.1 — ScriptHub GUI Library (black / grey / silver)
+	EXODUS 0.0.1 — ScriptHub GUI Library 
 
 	GitHub:
 		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
