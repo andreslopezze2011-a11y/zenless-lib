@@ -65,7 +65,7 @@ getgenv().MilkyHubLoaded = false
 -- Structure:
 -- Theme / Config -> Utilities -> Animations -> Core primitives
 -- Icons -> Window shell -> Controls -> KeySystem / Boot -> Public API
-local LIBRARY_VERSION = "0.0.2"
+local LIBRARY_VERSION = "0.0.3"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
@@ -1261,11 +1261,25 @@ end
 -- ============ WINDOW SHELL (root / chrome) ============
 print("[Milky Hub] loaded")
 
-local WIN_W, WIN_H, MINI_H = 720, 480, 48
+local WIN_W, WIN_H, MINI_H = 580, 400, 48
 local minimized = false -- early: resize pads / title layout / shell helpers share this
 local AVATAR_URL = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
 local DISPLAY_NAME = player.DisplayName
 local USER_NAME = player.Name
+local IS_MOBILE = false
+pcall(function()
+	IS_MOBILE = UserInputService.TouchEnabled
+		and (not UserInputService.KeyboardEnabled or UserInputService.GyroscopeEnabled)
+	local cam = workspace.CurrentCamera
+	local vp = cam and cam.ViewportSize
+	if vp and math.min(vp.X, vp.Y) < 720 then
+		IS_MOBILE = true
+	end
+end)
+if IS_MOBILE then
+	WIN_W, WIN_H = 420, 340
+	Flags.LargeHitboxes = true
+end
 
 local root = make("Frame", {
 	Name = "Root",
@@ -1987,23 +2001,24 @@ local dotGlow = make("Frame", {
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
--- Title + version sit side-by-side (MILKY white / HUB pink)
+-- Title + version sit side-by-side (MILKY white / HUB pink). Never overlap version.
 local TITLE_LEFT = 44
-local TITLE_RIGHT_RESERVE = 230 -- fps / bell / win controls
-local VERSION_GAP = 8
+local TITLE_RIGHT_RESERVE = 210 -- fps / bell / win controls
+local VERSION_GAP = 6
+titleBar.ClipsDescendants = true
 
 local titleLabel = make("TextLabel", {
 	Name = "Title",
 	BackgroundTransparency = 1,
-	Size = UDim2.new(1, -230, 1, 0),
+	Size = UDim2.fromOffset(64, MINI_H),
 	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.GothamBold,
 	Text = "MILKY",
 	TextSize = 15,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	TextTruncate = Enum.TextTruncate.AtEnd,
-	ZIndex = 3,
+	TextTruncate = Enum.TextTruncate.None,
+	ZIndex = 5,
 })
 titleLabel.Parent = titleBar
 
@@ -2018,10 +2033,27 @@ local hubLabel = make("TextLabel", {
 	TextSize = 15,
 	TextColor3 = Theme.Accent,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 3,
+	ZIndex = 5,
 })
 hubLabel.Parent = titleBar
 registerAccent(hubLabel, "TextColor3")
+
+-- Optional game / custom subtitle after brand (truncated before version)
+local gameTitleLabel = make("TextLabel", {
+	Name = "GameTitle",
+	BackgroundTransparency = 1,
+	Size = UDim2.fromOffset(0, MINI_H),
+	Position = UDim2.fromOffset(TITLE_LEFT, 0),
+	Font = Enum.Font.GothamMedium,
+	Text = "",
+	TextSize = 12,
+	TextColor3 = Theme.SubText,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Visible = false,
+	ZIndex = 5,
+})
+gameTitleLabel.Parent = titleBar
 
 local versionLabel = make("TextLabel", {
 	Name = "Version",
@@ -2030,10 +2062,10 @@ local versionLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.Gotham,
 	Text = "v" .. LIBRARY_VERSION,
-	TextSize = 12,
+	TextSize = 11,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 4,
+	ZIndex = 5,
 })
 versionLabel.Parent = titleBar
 
@@ -2047,9 +2079,39 @@ local function measureLabelWidth(label, fallbackChars)
 		)
 	end)
 	if ok and bounds and typeof(bounds) == "Vector2" then
-		return bounds.X
+		return math.ceil(bounds.X)
 	end
 	return math.max(28, #(tostring(label.Text or "")) * (fallbackChars or 7))
+end
+
+local function ellipsizeToWidth(text, font, textSize, maxW)
+	text = tostring(text or "")
+	if maxW < 20 then
+		return ""
+	end
+	local ok, bounds = pcall(function()
+		return TextService:GetTextSize(text, textSize, font, Vector2.new(10000, MINI_H))
+	end)
+	if ok and bounds and bounds.X <= maxW then
+		return text
+	end
+	local ell = "…"
+	local lo, hi = 0, #text
+	local best = ell
+	while lo <= hi do
+		local mid = math.floor((lo + hi) / 2)
+		local candidate = string.sub(text, 1, mid) .. ell
+		local ok2, b2 = pcall(function()
+			return TextService:GetTextSize(candidate, textSize, font, Vector2.new(10000, MINI_H))
+		end)
+		if ok2 and b2 and b2.X <= maxW then
+			best = candidate
+			lo = mid + 1
+		else
+			hi = mid - 1
+		end
+	end
+	return best
 end
 
 local function layoutTitleVersion()
@@ -2060,21 +2122,64 @@ local function layoutTitleVersion()
 	end
 	if barW < 1 then return end
 	local reserve = TITLE_RIGHT_RESERVE
-	if minimized and barW < 420 then
-		reserve = math.min(reserve, math.max(160, barW * 0.55))
+	if IS_MOBILE or (minimized and barW < 420) then
+		reserve = math.min(reserve, math.max(118, barW * 0.42))
 	end
-	local hubW = math.max(measureLabelWidth(hubLabel, 8), 28)
+	if minimized then
+		-- Hide fps/bell visually crowded chrome space already reserved smaller
+		reserve = math.min(reserve, 130)
+	end
+	local hubVisible = hubLabel.Visible
+	local gameVisible = gameTitleLabel.Visible and gameTitleLabel.Text ~= ""
+	local hubW = hubVisible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
 	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
 	local logoGap = 4
-	local maxTitleW = math.max(36, barW - TITLE_LEFT - reserve - VERSION_GAP - verW - hubW - logoGap)
-	local naturalW = measureLabelWidth(titleLabel, 9)
-	local titleW = math.min(naturalW, maxTitleW)
+	local gameGap = gameVisible and 8 or 0
+	local avail = barW - TITLE_LEFT - reserve - VERSION_GAP - verW - hubW - logoGap - gameGap
+	avail = math.max(24, avail)
+
+	-- Brand title (MILKY or custom) gets first priority
+	local naturalTitle = measureLabelWidth(titleLabel, 9)
+	local titleBudget = gameVisible and math.min(naturalTitle, math.max(36, avail * 0.42)) or math.min(naturalTitle, avail)
+	local titleW = math.max(28, titleBudget)
 	titleLabel.Size = UDim2.fromOffset(titleW, MINI_H)
 	titleLabel.Position = UDim2.fromOffset(TITLE_LEFT, 0)
-	hubLabel.Size = UDim2.fromOffset(hubW + 2, MINI_H)
-	hubLabel.Position = UDim2.fromOffset(TITLE_LEFT + titleW + logoGap, 0)
+	titleLabel.ZIndex = 5
+
+	local cursor = TITLE_LEFT + titleW + logoGap
+	if hubVisible then
+		hubLabel.Size = UDim2.fromOffset(hubW + 2, MINI_H)
+		hubLabel.Position = UDim2.fromOffset(cursor, 0)
+		hubLabel.ZIndex = 5
+		cursor = cursor + hubW + 2
+	end
+
+	local gameBudget = math.max(0, (TITLE_LEFT + avail + hubW + logoGap) - cursor - gameGap)
+	if gameVisible and gameBudget > 18 then
+		local fullGame = gameTitleLabel:GetAttribute("FullText") or gameTitleLabel.Text
+		gameTitleLabel.Text = ellipsizeToWidth(fullGame, gameTitleLabel.Font, gameTitleLabel.TextSize, gameBudget)
+		local gw = math.min(measureLabelWidth(gameTitleLabel, 6), gameBudget)
+		gameTitleLabel.Size = UDim2.fromOffset(gw, MINI_H)
+		gameTitleLabel.Position = UDim2.fromOffset(cursor + gameGap, 0)
+		gameTitleLabel.Visible = true
+		cursor = cursor + gameGap + gw
+	elseif gameTitleLabel then
+		gameTitleLabel.Size = UDim2.fromOffset(0, MINI_H)
+		if not gameVisible then
+			gameTitleLabel.Visible = false
+		end
+	end
+
+	-- Version ALWAYS after content, never overlapping title/hub
+	local verX = math.max(cursor + VERSION_GAP, TITLE_LEFT + titleW + (hubVisible and (logoGap + hubW) or 0) + VERSION_GAP)
+	local maxVerX = barW - reserve - verW - 4
+	if verX > maxVerX then
+		-- Shrink game/title further so version fits cleanly
+		verX = math.max(TITLE_LEFT + 40, maxVerX)
+	end
 	versionLabel.Size = UDim2.fromOffset(verW + 2, MINI_H)
-	versionLabel.Position = UDim2.fromOffset(TITLE_LEFT + titleW + logoGap + hubW + VERSION_GAP, 0)
+	versionLabel.Position = UDim2.fromOffset(verX, 0)
+	versionLabel.ZIndex = 5
 end
 
 titleLabel:GetPropertyChangedSignal("Text"):Connect(layoutTitleVersion)
@@ -2257,11 +2362,15 @@ local applyWindowOpacity
 
 local function computeMiniWidth()
 	local titleW = math.min(measureLabelWidth(titleLabel, 9), 100)
-	local hubW = math.max(measureLabelWidth(hubLabel, 8), 28)
+	local hubW = hubLabel.Visible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
 	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
-	local left = TITLE_LEFT + titleW + 4 + hubW + VERSION_GAP + verW + 16
-	local right = 72 + 10 + 26 + 14 + 70 + 14
-	return math.clamp(math.floor(left + right), 320, math.max(WIN_W, 320))
+	local gameW = 0
+	if gameTitleLabel and gameTitleLabel.Visible then
+		gameW = math.min(measureLabelWidth(gameTitleLabel, 6), 90)
+	end
+	local left = TITLE_LEFT + titleW + 4 + hubW + gameW + VERSION_GAP + verW + 16
+	local right = IS_MOBILE and 90 or (72 + 10 + 26 + 14 + 70 + 14)
+	return math.clamp(math.floor(left + right), 280, math.max(WIN_W, 280))
 end
 
 local function setResizeEnabled(on)
@@ -2730,7 +2839,7 @@ local hintLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
 	Size = UDim2.fromOffset(0, 0),
 	Visible = false,
-	Text = "RightShift - hide",
+	Text = IS_MOBILE and "MH button - hide" or "RightShift - hide",
 	TextSize = 9,
 	TextColor3 = Theme.SubText,
 })
@@ -2738,7 +2847,7 @@ hintLabel.Parent = userCard
 userCard.ClipsDescendants = true
 
 -- Content panel under top nav (full width)
-local RIGHT_RAIL_W = 168
+local RIGHT_RAIL_W = IS_MOBILE and 0 or 148
 local contentPanel = make("Frame", {
 	Name = "ContentPanel",
 	Size = UDim2.new(1, -(24 + RIGHT_RAIL_W), 1, -(NAV_H + 18)),
@@ -2752,12 +2861,13 @@ topHighlight(contentPanel)
 
 local rightRail = make("Frame", {
 	Name = "RightRail",
-	Size = UDim2.new(0, RIGHT_RAIL_W, 1, -(NAV_H + 18)),
-	Position = UDim2.new(1, -(RIGHT_RAIL_W + 8), 0, NAV_H + 12),
+	Size = UDim2.new(0, math.max(RIGHT_RAIL_W, 1), 1, -(NAV_H + 18)),
+	Position = UDim2.new(1, -(math.max(RIGHT_RAIL_W, 1) + 8), 0, NAV_H + 12),
 	BackgroundColor3 = Theme.Sidebar,
 	BackgroundTransparency = 0.12,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
+	Visible = not IS_MOBILE and RIGHT_RAIL_W > 0,
 }, { corner(12), stroke(Theme.Stroke, 1, 0.5), cardLit() })
 rightRail.Parent = body
 
@@ -2817,7 +2927,7 @@ make("TextLabel", {
 	Size = UDim2.new(1, -20, 0, 42),
 	Position = UDim2.fromOffset(10, 198),
 	Font = Enum.Font.Gotham,
-	Text = "ScriptHub glass UI\nRightShift to hide",
+	Text = IS_MOBILE and "Tap MH button to hide" or "ScriptHub glass UI\nRightShift to hide",
 	TextSize = 11,
 	TextColor3 = Theme.SubText,
 	TextWrapped = true,
@@ -4027,6 +4137,10 @@ local function createToggle(tab, text, default, callback, opts)
 		if state then
 			sparkBurst(track, 21, 11, Theme.Accent, 6)
 		end
+	end)
+	-- Touch-friendly: Activated fires for tap on mobile executors
+	pcall(function()
+		holder.Activated:Connect(function() end) -- ensure Active path; click already handles
 	end)
 
 	render()
@@ -6205,6 +6319,11 @@ local uiVisible = true
 -- minimized declared earlier (near WIN_W) for resize/title layout
 local hasCelebrated = false
 local toggleKey = Enum.KeyCode.RightShift
+local mobileHideGui = nil
+local destroyMobileHideButton
+local showMobileHideButton
+local setMobileMode
+local setRightRailVisible
 
 local function runUnloadHooks()
 	local hooks = State.unloadHooks
@@ -6231,6 +6350,7 @@ local function destroyGui()
 	State._destroying = true
 	uiVisible = false
 	runUnloadHooks()
+	destroyMobileHideButton()
 	if loaderHost and loaderHost.Parent then
 		pcall(function() loaderHost:Destroy() end)
 	end
@@ -6267,13 +6387,13 @@ local function showWindow()
 	targetPos = root.Position
 	if not minimized then
 		local sw = State.savedWindowSize
-		local okSize = sw and sw.Y.Offset >= 280 and sw.X.Offset >= 420
+		local okSize = sw and sw.Y.Offset >= 260 and sw.X.Offset >= 360
 		if okSize then
 			root.Size = sw
 			WIN_W, WIN_H = sw.X.Offset, sw.Y.Offset
 		else
-			if WIN_H < 280 or WIN_W < 420 then
-				WIN_W, WIN_H = 610, 430
+			if WIN_H < 260 or WIN_W < 360 then
+				WIN_W, WIN_H = IS_MOBILE and 420 or 580, IS_MOBILE and 320 or 400
 			end
 			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
 		end
@@ -6311,6 +6431,118 @@ end
 local function toggleWindow()
 	uiVisible = not uiVisible
 	if uiVisible then showWindow() else hideWindow() end
+end
+
+-- Floating mobile hide button (touch devices can't rely on RightShift)
+destroyMobileHideButton = function()
+	if mobileHideGui and mobileHideGui.Parent then
+		pcall(function() mobileHideGui:Destroy() end)
+	end
+	mobileHideGui = nil
+end
+
+showMobileHideButton = function(on)
+	if on == false then
+		destroyMobileHideButton()
+		return false
+	end
+	if mobileHideGui and mobileHideGui.Parent then
+		mobileHideGui.Enabled = true
+		return true
+	end
+	local parentGui = screenGui and screenGui.Parent
+	if not parentGui then
+		pcall(function()
+			parentGui = (gethui and gethui()) or game:GetService("CoreGui")
+		end)
+	end
+	if not parentGui then return false end
+	local sg = make("ScreenGui", {
+		Name = "MilkyMobileHide",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 100001,
+	})
+	sg.Parent = parentGui
+	mobileHideGui = sg
+	local btn = make("TextButton", {
+		Name = "HideBtn",
+		Size = UDim2.fromOffset(56, 56),
+		Position = UDim2.new(1, -72, 0.55, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = Theme.Accent,
+		Text = "MH",
+		Font = Enum.Font.GothamBold,
+		TextSize = 15,
+		TextColor3 = Color3.new(1, 1, 1),
+		AutoButtonColor = true,
+		ZIndex = 100,
+	}, { corner(16), stroke(Color3.new(1, 1, 1), 1, 0.55) })
+	btn.Parent = sg
+	registerAccent(btn, "BackgroundColor3")
+	btn.MouseButton1Click:Connect(function()
+		toggleWindow()
+	end)
+	pcall(function()
+		btn.Activated:Connect(function()
+			toggleWindow()
+		end)
+	end)
+	return true
+end
+
+setRightRailVisible = function(on)
+	on = on and true or false
+	RIGHT_RAIL_W = on and 148 or 0
+	pcall(function()
+		if rightRail then
+			rightRail.Visible = on
+			rightRail.Size = UDim2.new(0, math.max(RIGHT_RAIL_W, 1), 1, -(NAV_H + 18))
+			rightRail.Position = UDim2.new(1, -(math.max(RIGHT_RAIL_W, 1) + 8), 0, NAV_H + 12)
+		end
+		if contentPanel then
+			contentPanel.Size = UDim2.new(1, -(24 + RIGHT_RAIL_W), 1, -(NAV_H + 18))
+		end
+	end)
+	return on
+end
+
+setMobileMode = function(on)
+	if on == nil then on = true end
+	IS_MOBILE = on and true or false
+	Flags.LargeHitboxes = IS_MOBILE or Flags.LargeHitboxes
+	pcall(function()
+		if IS_MOBILE then
+			if setSizePreset then setSizePreset("Compact") end
+			setRightRailVisible(false)
+			showMobileHideButton(true)
+			if fpsPill and root.Size.X.Offset < 460 then
+				fpsPill.Visible = false
+				TITLE_RIGHT_RESERVE = 120
+			end
+			hintLabel.Text = "MH button - hide"
+		else
+			setRightRailVisible(true)
+			if not UserInputService.TouchEnabled then
+				destroyMobileHideButton()
+			end
+			if fpsPill then fpsPill.Visible = true end
+			TITLE_RIGHT_RESERVE = 210
+			hintLabel.Text = (toggleKey and toggleKey.Name or "RightShift") .. " - hide"
+		end
+		layoutTitleVersion()
+	end)
+	return IS_MOBILE
+end
+
+-- Auto-enable mobile layout when appropriate
+if IS_MOBILE then
+	task.defer(function()
+		pcall(function()
+			setMobileMode(true)
+		end)
+	end)
 end
 
 closeBtn.MouseButton1Click:Connect(destroyGui)
@@ -6428,9 +6660,9 @@ end
 
 -- ---- 2) Window shell helpers (assign to forward decls) ----
 local sizePresets = {
-	Compact = { 480, 340 },
-	Normal = { 610, 430 },
-	Wide = { 760, 500 },
+	Compact = { 420, 320 },
+	Normal = { 580, 400 },
+	Wide = { 720, 480 },
 }
 local preFullscreen = nil
 local SIDEBAR_W, SIDEBAR_COLLAPSED_W = 0, 0 -- unused: top pill nav (kept for compat)
@@ -8339,6 +8571,15 @@ applyV6PublicAPI = function(lib)
 	end
 	lib.SetFlag = function(_, name, value) return setFlag(name, value) end
 	lib.GetFlag = function(_, name) return Flags[name] end
+	lib.SetMobileMode = function(_, on)
+		if setMobileMode then return setMobileMode(on) end
+	end
+	lib.ShowMobileHideButton = function(_, on)
+		if showMobileHideButton then return showMobileHideButton(on) end
+	end
+	lib.IsMobile = function()
+		return IS_MOBILE
+	end
 	lib.SaveConfig = function() return saveConfigFile() end
 	lib.LoadConfig = function() return loadConfigFile() end
 	lib.ExportConfig = function()
@@ -9700,19 +9941,58 @@ Milky.Window = {
 	end,
 	SetTitle = function(text)
 		local t = tostring(text or "Milky Hub")
-		if string.upper(t) == "MILKY HUB" or string.upper(t) == "MILKYHUB" then
+		local upper = string.upper(t)
+		if upper == "MILKY HUB" or upper == "MILKYHUB" or t == "" then
 			titleLabel.Text = "MILKY"
-			if hubLabel then hubLabel.Visible = true; hubLabel.Text = "HUB" end
+			if hubLabel then
+				hubLabel.Visible = true
+				hubLabel.Text = "HUB"
+			end
+			if gameTitleLabel then
+				gameTitleLabel.Visible = false
+				gameTitleLabel.Text = ""
+				gameTitleLabel:SetAttribute("FullText", "")
+			end
 		else
-			titleLabel.Text = t
-			if hubLabel then hubLabel.Visible = false end
+			-- Keep brand (MILKY + pink HUB); put remainder as truncated game subtitle
+			local gamePart = string.match(t, "^[Mm]ilky%s*[Hh]ub%s*[|%-%—:]%s*(.+)$")
+				or string.match(t, "^MILKY%s*HUB%s*[|%-%—:]%s*(.+)$")
+			if not gamePart and upper:find("MILKY", 1, true) then
+				gamePart = string.gsub(t, "^%s*[Mm][Ii][Ll][Kk][Yy]%s*[Hh][Uu][Bb]%s*", "")
+				gamePart = string.gsub(gamePart, "^[%|%-%—:%s]+", "")
+			end
+			titleLabel.Text = "MILKY"
+			if hubLabel then
+				hubLabel.Visible = true
+				hubLabel.Text = "HUB"
+			end
+			if gameTitleLabel then
+				if gamePart and gamePart ~= "" then
+					gameTitleLabel:SetAttribute("FullText", gamePart)
+					gameTitleLabel.Text = gamePart
+					gameTitleLabel.Visible = true
+				else
+					-- Fully custom title without brand prefix
+					titleLabel.Text = t
+					if hubLabel then hubLabel.Visible = false end
+					gameTitleLabel.Visible = false
+					gameTitleLabel.Text = ""
+					gameTitleLabel:SetAttribute("FullText", "")
+				end
+			end
 		end
 		layoutTitleVersion()
 	end,
 	SetToggleKey = function(key)
 		toggleKey = key
-		hintLabel.Text = key.Name .. " - hide"
+		hintLabel.Text = (IS_MOBILE and "MH button - hide") or (key.Name .. " - hide")
 	end,
+	SetMobileMode = setMobileMode,
+	ShowMobileHideButton = showMobileHideButton,
+	IsMobile = function()
+		return IS_MOBILE
+	end,
+	SetRightRailVisible = setRightRailVisible,
 	Celebrate = function()
 		celebrateOpen(window)
 	end,
@@ -10089,7 +10369,8 @@ homeTab:AddButton({
 		Milky:Notify({ Title = "Error", Content = "Something failed (demo).", Type = "error", Duration = 2.5 })
 	end,
 })
-homeTab:AddHotkeyHint({ "RightShift" }, "Toggle window visibility")
+homeTab:AddHotkeyHint({ "RightShift" }, "Toggle window (desktop)")
+homeTab:AddParagraph("Mobile", "On touch devices a floating MH button toggles the window. Right rail is hidden and hitboxes are larger.")
 
 task.spawn(function()
 	local secs = 0
