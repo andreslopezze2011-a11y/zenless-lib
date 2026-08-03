@@ -1,4 +1,4 @@
--- Milky Hub 0.0.2 - ScriptHub GUI Library (pink glass)
+-- Milky Hub 0.0.4 - ScriptHub GUI Library (pink glass)
 --[[
   Usage (library mode):
     getgenv().MILKY_DEFER_BOOT = true
@@ -65,7 +65,7 @@ getgenv().MilkyHubLoaded = false
 -- Structure:
 -- Theme / Config -> Utilities -> Animations -> Core primitives
 -- Icons -> Window shell -> Controls -> KeySystem / Boot -> Public API
-local LIBRARY_VERSION = "0.0.3"
+local LIBRARY_VERSION = "0.0.4"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
@@ -209,6 +209,8 @@ local State = {
 	premium = false,
 	licenseTier = "none", -- none | standard | premium
 	premiumBadge = nil,
+	-- V6 API exports (avoids main-chunk forward locals / 200-register limit)
+	V6 = {},
 }
 
 local function safeCall(fn, ...)
@@ -6565,9 +6567,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 -- ============ V6 MEGA CHUNK ============
+-- Forward API locals MUST live inside this IIFE. Declaring them in the main chunk
+-- exceeds Luau's 200 local-register limit (compile error at SetNotificationMode).
+;(function()
 local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
-(function()
 -- ============ ZENLESS V6 CHUNK (splice into FluentGui.lua, same scope) ============
 -- Place AFTER: local minimized / window shell / createTab / notify / tabs exist.
 -- bindTabAPI / createTab should call enhanceTab(tab) - wrapper below also does this.
@@ -8764,6 +8768,18 @@ applyV6PublicAPI = function(lib)
 	return lib
 end
 
+-- Export V6 API onto State so the main chunk can call it without extra locals.
+State.V6.applyV6PublicAPI = applyV6PublicAPI
+State.V6.SetNotificationMode = SetNotificationMode
+State.V6.NotifyProgress = NotifyProgress
+State.V6.enhanceTab = enhanceTab
+State.V6.closeTab = closeTab
+State.V6.cycleTab = cycleTab
+State.V6.createFOVOverlay = createFOVOverlay
+State.V6.setControlByFlag = setControlByFlag
+State.V6.applyControlsMap = applyControlsMap
+State.V6.bindLive = bindLive
+
 -- Auto-apply if Milky table already exists in this scope (after public library block)
 pcall(function()
 	if type(Milky) == "table" then
@@ -9890,22 +9906,27 @@ function Milky:OnUnload(fn)
 end
 
 function Milky:CreateFOVOverlay(opts)
-	return createFOVOverlay(opts)
+	local fn = State.V6 and State.V6.createFOVOverlay
+	if fn then return fn(opts) end
 end
 
 function Milky:SetControl(flag, value, silent)
-	return setControlByFlag(flag, value, silent)
+	local fn = State.V6 and State.V6.setControlByFlag
+	if fn then return fn(flag, value, silent) end
 end
 
 function Milky:ApplyControls(map, silent)
-	return applyControlsMap(map, silent)
+	local fn = State.V6 and State.V6.applyControlsMap
+	if fn then return fn(map, silent) end
 end
 
 function Milky:BindLive(interval, fn)
+	local bind = State.V6 and State.V6.bindLive
+	if not bind then return end
 	if type(interval) == "function" then
-		return bindLive(0.25, interval)
+		return bind(0.25, interval)
 	end
-	return bindLive(interval, fn)
+	return bind(interval, fn)
 end
 
 function Milky:GetControl(flag)
@@ -10210,7 +10231,8 @@ end
 
 -- Apply extended API surface (window helpers, notifs, theme, components on tabs)
 pcall(function()
-	applyV6PublicAPI(Milky)
+	local apply = State.V6 and State.V6.applyV6PublicAPI
+	if apply then apply(Milky) end
 end)
 
 -- Aliases for Fluent-style / Zenless loaders (no extra chunk locals — register limit)
