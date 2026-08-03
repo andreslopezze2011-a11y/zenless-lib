@@ -1,29 +1,11 @@
 --[[
 	EXODUS 0.0.1 — ScriptHub GUI Library 
-
-	GitHub:
-		https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
-
-	Load (executor):
-		getgenv().EXODUS_DEFER_BOOT = true
-		local Exodus = loadstring(game:HttpGet("https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua"))()
-		-- or: loadstring(readfile("FluentGui.lua"))()
-
-	Boot ScriptHub:
-		Exodus:Boot({
-			KeySystem = {
-				Title = "EXODUS",
-				Subtitle = "ScriptHub Access",
-				StandardKeys = { "12345678", "EXODUS-HUB" }, -- or Keys = {...}
-				PremiumKeys = { "VIP-ACCESS", "PREMIUM-EXODUS", "EXODUS-PRO" },
-				SaveKey = true,
-				KeyLink = "https://discord.gg/",
-			},
-			Loader = true,
-		})
-		local Window = Exodus:CreateWindow({ Title = "EXODUS ScriptHub" })
-		local Tab = Window:AddTab({ Title = "Combat", Icon = "target" }) -- or Exodus:AddTab
-		-- Tier after unlock: Exodus.KeyTier / Window.KeyTier / Exodus:GetLicenseTier()
+	GitHub: https://raw.githubusercontent.com/andreslopezze2011-a11y/zenless-lib/refs/heads/main/FluentGui.lua
+	Mobile-friendly improvements:
+	- Auto-scaling based on viewport size
+	- Touch support for drag/resize
+	- Larger touch targets on mobile
+	- Responsive font sizes
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -48,7 +30,7 @@ local CONFIG_FILE = "exodus_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
--- ============ THEME (black / grey / silver) ============
+-- ============ THEME ============
 local Theme = {
 	Background   = Color3.fromRGB(14, 14, 16),
 	Sidebar      = Color3.fromRGB(18, 18, 20),
@@ -56,7 +38,7 @@ local Theme = {
 	Element      = Color3.fromRGB(34, 34, 38),
 	ElementHover = Color3.fromRGB(48, 48, 54),
 	ElementPress = Color3.fromRGB(26, 26, 30),
-	Accent       = Color3.fromRGB(198, 198, 208), -- silver
+	Accent       = Color3.fromRGB(198, 198, 208),
 	AccentHover  = Color3.fromRGB(230, 230, 238),
 	AccentSoft   = Color3.fromRGB(140, 140, 150),
 	Text         = Color3.fromRGB(245, 245, 248),
@@ -83,32 +65,45 @@ local function registerText(obj)
 	if obj then table.insert(textRegistry, obj) end
 end
 
+-- ============ MOBILE FRIENDLY ADJUSTMENTS ============
+local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+local function scaleSize(baseSize)
+	-- If mobile, use viewport size to scale (but keep within bounds)
+	local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+	local scale = math.min(1, math.min(vp.X / 1200, vp.Y / 800)) -- Cap at 1x
+	if isMobile then
+		return math.max(0.75, math.min(1.2, scale)) * baseSize
+	end
+	return baseSize
+end
+
+-- Animations slightly faster on mobile to feel responsive
 local Anim = {
-	Fast   = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Smooth = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Spring = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Snap   = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Fast   = TweenInfo.new(isMobile and 0.12 or 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Smooth = TweenInfo.new(isMobile and 0.28 or 0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Spring = TweenInfo.new(isMobile and 0.35 or 0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Snap   = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	Linear = TweenInfo.new(0.2, Enum.EasingStyle.Linear),
-	Sidebar = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Minimize = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Press  = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Release = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Shine  = TweenInfo.new(0.58, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Soft   = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Nav    = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Sidebar = TweenInfo.new(isMobile and 0.3 or 0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Minimize = TweenInfo.new(isMobile and 0.35 or 0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Press  = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Release = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Shine  = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Soft   = TweenInfo.new(isMobile and 0.2 or 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Nav    = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
--- ============ V6 FLAGS / SERVICES ============
+-- ============ FLAGS ============
 local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
-	DisableParticles = true, -- KRNL-safe boot; enable later via SetFlag
+	DisableParticles = true,
 	DisableGrid = true,
 	DisableDust = true,
 	LazyTabs = false,
 	HighContrast = false,
 	Monochrome = false,
-	LargeHitboxes = false,
+	LargeHitboxes = isMobile and true or false, -- auto-enable for mobile
 	ClickThrough = false,
 	AlwaysOnTop = false,
 	SilentNotifications = false,
@@ -124,15 +119,16 @@ local Flags = {
 	TransparencyMode = false,
 	LightMode = false,
 	Clock24h = true,
-	DebounceMs = 60,
+	DebounceMs = isMobile and 120 or 60,
 	UnfocusedOpacity = 0,
 	NotifVolume = 0.35,
-	UiScale = 1,
+	UiScale = isMobile and 0.85 or 1,
 	Font = Enum.Font.Gotham,
 	ParticleFpsThreshold = 30,
 	DndStartHour = -1,
 	DndEndHour = -1,
 	PremiumMode = false,
+	MobileMode = isMobile,
 }
 
 local ConfigData = {
@@ -161,7 +157,7 @@ local State = {
 	recentTabs = {},
 	tabFolders = {},
 	uiFont = Enum.Font.Gotham,
-	uiScaleValue = 1,
+	uiScaleValue = isMobile and 0.85 or 1,
 	savedWindowPos = nil,
 	savedWindowSize = nil,
 	currentPreset = "Normal",
@@ -182,7 +178,7 @@ local State = {
 	liveBinds = {},
 	overlays = {},
 	premium = false,
-	licenseTier = "none", -- none | standard | premium
+	licenseTier = "none",
 	premiumBadge = nil,
 }
 
@@ -306,7 +302,6 @@ local function loadConfigFile()
 	ConfigData.recentColors = ConfigData.recentColors or {}
 	ConfigData.profiles = ConfigData.profiles or {}
 	ConfigData.achievements = ConfigData.achievements or {}
-	-- Never let saved config re-enable heavy boot FX (KRNL timeout risk)
 	local protect = {
 		DisableGrid = true,
 		DisableDust = true,
@@ -362,7 +357,6 @@ local function playUiSound(kind)
 		local sound = Instance.new("Sound")
 		sound.Volume = (Flags.NotifVolume or 0.35) * (kind == "error" and 0.5 or 0.25)
 		sound.PlayOnRemove = false
-		-- soft click via short tone asset fallback
 		sound.SoundId = "rbxassetid://6895079853"
 		sound.PlaybackSpeed = (freqs[kind] or 600) / 600
 		sound.Parent = SoundService
@@ -389,7 +383,6 @@ end
 
 pcall(loadConfigFile)
 
--- Helpers MUST be defined before VisualFX (createGridOverlay / sparkBurst call these)
 local function make(class, props, children)
 	local inst = Instance.new(class)
 	for k, v in pairs(props) do
@@ -416,11 +409,7 @@ local function stroke(color, thickness, transparency)
 	})
 end
 
---[[
-	Frame-drawn icons (no unicode — Gotham can't render most glyphs).
-	Usage: local icon = drawIcon(parent, "target", Theme.Accent, 16)
-	       icon.SetColor(newColor)
-]]
+-- ============ ICON SYSTEM (unchanged) ============
 local IconAliases = {
 	["c"] = "target", combat = "target", aimbot = "target", crosshair = "target",
 	["e"] = "eye", esp = "eye", visuals = "eye", view = "eye",
@@ -443,7 +432,6 @@ local IconAliases = {
 local function resolveIconName(name)
 	if type(name) ~= "string" or name == "" then return "dot" end
 	local key = string.lower(name)
-	-- rbxasset / http image passthrough
 	if string.find(key, "rbxasset", 1, true) or string.find(key, "http", 1, true) then
 		return name
 	end
@@ -503,7 +491,6 @@ local function drawIcon(parent, name, color, pixelSize)
 		return f
 	end
 
-	-- Image icons
 	if string.find(tostring(name), "rbxasset", 1, true) or string.find(tostring(name), "http", 1, true) then
 		local img = make("ImageLabel", {
 			Size = UDim2.new(1, 0, 1, 0),
@@ -524,10 +511,8 @@ local function drawIcon(parent, name, color, pixelSize)
 		bar(pixelSize / 2, pixelSize / 2, pixelSize * 0.62, 2, 0)
 		bar(pixelSize / 2, pixelSize / 2, 2, pixelSize * 0.62, 0)
 	elseif name == "home" then
-		-- roof
 		bar(pixelSize / 2, pixelSize * 0.38, pixelSize * 0.55, 2, 40)
 		bar(pixelSize / 2, pixelSize * 0.38, pixelSize * 0.55, 2, -40)
-		-- body
 		add({
 			Size = UDim2.fromOffset(pixelSize * 0.48, pixelSize * 0.38),
 			Position = UDim2.fromOffset(pixelSize / 2, pixelSize * 0.68),
@@ -622,11 +607,9 @@ local function drawIcon(parent, name, color, pixelSize)
 			end
 		end
 	else
-		-- default: soft diamond / dot
 		circle(pixelSize / 2, pixelSize / 2, pixelSize * 0.28, true)
 	end
 
-	-- Collect strokes created as children of shapes
 	for _, p in ipairs(host:GetDescendants()) do
 		if p:IsA("UIStroke") then
 			table.insert(parts, p)
@@ -655,16 +638,11 @@ local function drawIcon(parent, name, color, pixelSize)
 	return api
 end
 
--- Public icon list for library consumers
 local IconNames = {
 	"target", "eye", "world", "user", "settings", "home", "star",
 	"close", "minus", "plus", "bolt", "shield", "box", "chat", "search", "grid", "dot",
 }
 
---[[
-	Rounded metallic rim + traveling silver sheen.
-	Uses UICorner + UIStroke (no square edge rectangles).
-]]
 local function attachPerimeterLight(parent, opts)
 	opts = opts or {}
 	local z = opts.ZIndex or 42
@@ -686,7 +664,6 @@ local function attachPerimeterLight(parent, opts)
 	pcall(function() host.Interactable = false end)
 	host.Parent = parent
 
-	-- Thin sheen only — no side glow / trail blob
 	local light = make("Frame", {
 		Name = "SheenLight",
 		Size = UDim2.fromOffset(36, 2),
@@ -710,7 +687,6 @@ local function attachPerimeterLight(parent, opts)
 		}),
 	}).Parent = light
 
-	-- Point on a rounded-rect perimeter (clockwise, starts mid-top)
 	local function pointOnRoundedRect(u, w, h, r)
 		r = math.clamp(r, 0, math.min(w, h) * 0.5)
 		local sh = math.max(0, w - 2 * r)
@@ -722,45 +698,37 @@ local function attachPerimeterLight(parent, opts)
 		end
 		local d = (u % 1) * peri
 
-		-- 1) top straight
 		if d <= sh then
 			return r + d, 1, 0
 		end
 		d = d - sh
-		-- 2) top-right corner
 		if d <= arc then
 			local ang = -math.pi * 0.5 + (d / math.max(arc, 1e-4)) * (math.pi * 0.5)
 			return (w - r) + math.cos(ang) * r, r + math.sin(ang) * r, math.deg(ang) + 90
 		end
 		d = d - arc
-		-- 3) right straight
 		if d <= sv then
 			return w - 1, r + d, 90
 		end
 		d = d - sv
-		-- 4) bottom-right corner
 		if d <= arc then
 			local ang = 0 + (d / math.max(arc, 1e-4)) * (math.pi * 0.5)
 			return (w - r) + math.cos(ang) * r, (h - r) + math.sin(ang) * r, math.deg(ang) + 90
 		end
 		d = d - arc
-		-- 5) bottom straight (right → left)
 		if d <= sh then
 			return (w - r) - d, h - 1, 0
 		end
 		d = d - sh
-		-- 6) bottom-left corner
 		if d <= arc then
 			local ang = math.pi * 0.5 + (d / math.max(arc, 1e-4)) * (math.pi * 0.5)
 			return r + math.cos(ang) * r, (h - r) + math.sin(ang) * r, math.deg(ang) + 90
 		end
 		d = d - arc
-		-- 7) left straight (bottom → top)
 		if d <= sv then
 			return 1, (h - r) - d, 90
 		end
 		d = d - sv
-		-- 8) top-left corner
 		local ang = math.pi + (d / math.max(arc, 1e-4)) * (math.pi * 0.5)
 		return r + math.cos(ang) * r, r + math.sin(ang) * r, math.deg(ang) + 90
 	end
@@ -866,7 +834,6 @@ local function clickRipple(btn, localX, localY, color)
 	color = color or Theme.Highlight
 	local maxSize = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 1.85
 
-	-- Soft outer bloom
 	local bloom = make("Frame", {
 		Size = UDim2.fromOffset(6, 6),
 		Position = UDim2.fromOffset(localX, localY),
@@ -922,7 +889,6 @@ local function clickRipple(btn, localX, localY, color)
 	end)
 end
 
--- Shared premium button motion (press / shine / hover lift)
 local function decorateButton(btn, opts)
 	opts = opts or {}
 	local primary = opts.primary == true
@@ -959,7 +925,6 @@ local function decorateButton(btn, opts)
 		strokeObj.Parent = btn
 	end
 
-	-- Shine sweep (primary / danger)
 	local shine
 	if primary or danger then
 		shine = make("Frame", {
@@ -1228,8 +1193,20 @@ end
 
 print("[EXODUS] loaded")
 
-local WIN_W, WIN_H, MINI_H = 610, 430, 48
-local minimized = false -- early: resize pads / title layout / shell helpers share this
+-- ============ MOBILE-SENSITIVE DIMENSIONS ============
+local function getViewport()
+	local cam = workspace.CurrentCamera
+	return cam and cam.ViewportSize or Vector2.new(1920, 1080)
+end
+
+local vp = getViewport()
+local baseWidth = math.min(vp.X, 800)
+local baseHeight = math.min(vp.Y, 600)
+local WIN_W = math.max(420, math.min(610, baseWidth * 0.75))
+local WIN_H = math.max(300, math.min(430, baseHeight * 0.7))
+local MINI_H = isMobile and 40 or 48
+
+local minimized = false
 local AVATAR_URL = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
 local DISPLAY_NAME = player.DisplayName
 local USER_NAME = player.Name
@@ -1237,7 +1214,6 @@ local USER_NAME = player.Name
 local root = make("Frame", {
 	Name = "Root",
 	Size = UDim2.fromOffset(WIN_W, WIN_H),
-	-- Always top-left anchor so drag math stays simple
 	Position = UDim2.fromOffset(80, 80),
 	AnchorPoint = Vector2.new(0, 0),
 	BackgroundTransparency = 1,
@@ -1245,7 +1221,6 @@ local root = make("Frame", {
 })
 root.Parent = screenGui
 
--- Center once we know the viewport
 pcall(function()
 	local cam = workspace.CurrentCamera
 	local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
@@ -1255,7 +1230,6 @@ pcall(function()
 	)
 end)
 
--- UIScale MUST NOT live on root — it breaks drag position math.
 local scaleHost = make("Frame", {
 	Name = "ScaleHost",
 	Size = UDim2.new(1, 0, 1, 0),
@@ -1264,10 +1238,9 @@ local scaleHost = make("Frame", {
 })
 scaleHost.Parent = root
 
-local windowScale = make("UIScale", { Scale = 0.92 })
+local windowScale = make("UIScale", { Scale = isMobile and 0.85 or 0.92 })
 windowScale.Parent = scaleHost
 
--- Crisp border only — no soft filled glow / halo layers outside the window
 local windowStroke = stroke(Color3.fromRGB(200, 200, 210), 1, 0.15)
 local windowAccentStroke = stroke(Theme.Accent, 1, 0.55)
 registerAccent(windowAccentStroke, "Color")
@@ -1283,7 +1256,6 @@ local window = make("CanvasGroup", {
 }, { corner(10), windowStroke, windowAccentStroke })
 window.Parent = scaleHost
 
--- Rich multi-stop sheen (child frame — safe; gradient parallaxed separately)
 local bgSheenGradient = make("UIGradient", {
 	Rotation = 135,
 	Color = ColorSequence.new({
@@ -1321,13 +1293,11 @@ local dustHolder = make("Frame", {
 	ZIndex = 0,
 }, { corner(10) })
 dustHolder.Parent = window
--- Dust deferred so library return is fast on KRNL
 task.defer(function()
 	if Flags.DisableDust or not dustHolder or not dustHolder.Parent then return end
 	floatingDust(dustHolder, 8)
 end)
 
--- Subtle mouse parallax on bg sheen gradient only (not a wash overlay)
 RunService.RenderStepped:Connect(function()
 	if not window.Parent or window.GroupTransparency > 0.95 then return end
 	local mouse = UserInputService:GetMouseLocation()
@@ -1339,7 +1309,6 @@ RunService.RenderStepped:Connect(function()
 	bgSheenGradient.Rotation = 135 + relX * 6 + relY * 3
 end)
 
--- Inner rim highlight (white hairline inset)
 local innerRim = make("Frame", {
 	Size = UDim2.new(1, -4, 1, -4),
 	Position = UDim2.fromOffset(2, 2),
@@ -1351,7 +1320,6 @@ local innerRim = make("Frame", {
 })
 innerRim.Parent = window
 
--- Accent top bar + traveling white shine
 local topAccent = make("Frame", {
 	Size = UDim2.new(1, -24, 0, 2),
 	Position = UDim2.fromOffset(12, 0),
@@ -1397,7 +1365,6 @@ task.spawn(function()
 	end
 end)
 
--- Rounded metallic sheen — parented to window so hide/fade also hides the rim
 local windowRim = attachPerimeterLight(window, {
 	CornerRadius = 10,
 	Thickness = 1.5,
@@ -1405,9 +1372,9 @@ local windowRim = attachPerimeterLight(window, {
 	ZIndex = 45,
 })
 
--- ============ LOADER (10s download) ============
+-- ============ LOADER ============
 local playLoader
-local loaderHost -- outer so skip/destroy can clear the ghost rim
+local loaderHost
 (function()
 local LOADER_SECONDS = 2.4
 local loaderFinished = false
@@ -1418,7 +1385,7 @@ loaderHost = make("Frame", {
 	Position = UDim2.new(0.5, 0, 0.5, 0),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	BackgroundTransparency = 1,
-	Visible = false, -- never show empty host / rim until playLoader
+	Visible = false,
 	ZIndex = 20,
 })
 loaderHost.Parent = screenGui
@@ -1437,7 +1404,6 @@ local loaderCard = make("CanvasGroup", {
 })
 loaderCard.Parent = loaderHost
 
--- Layered backdrop (no UIGradient on CanvasGroup)
 local loaderBg = make("Frame", {
 	Size = UDim2.new(1, 0, 1, 0),
 	BackgroundColor3 = Color3.fromRGB(22, 22, 26),
@@ -1464,7 +1430,6 @@ local loaderBgTop = make("Frame", {
 })
 loaderBgTop.Parent = loaderCard
 
--- Soft spotlight behind avatar
 local loaderSpot = make("Frame", {
 	Size = UDim2.fromOffset(160, 160),
 	Position = UDim2.new(0.5, 0, 0, 70),
@@ -1476,7 +1441,6 @@ local loaderSpot = make("Frame", {
 }, { corner(80) })
 loaderSpot.Parent = loaderCard
 
--- Rim must live on the card (destroyed with host). Never leave a bare rim on-screen.
 attachPerimeterLight(loaderCard, {
 	CornerRadius = 16,
 	Thickness = 1.5,
@@ -1484,7 +1448,6 @@ attachPerimeterLight(loaderCard, {
 	ZIndex = 35,
 })
 
--- Header
 local loaderHeader = make("Frame", {
 	Size = UDim2.new(1, 0, 0, 48),
 	BackgroundTransparency = 1,
@@ -1548,7 +1511,6 @@ loaderClose.MouseLeave:Connect(function()
 	tween(loaderClose, Anim.Fast, { BackgroundTransparency = 0.05, BackgroundColor3 = Theme.Error })
 end)
 
--- Chrome top strip under header
 local loaderTop = make("Frame", {
 	Size = UDim2.new(1, -40, 0, 2),
 	Position = UDim2.fromOffset(20, 48),
@@ -1597,7 +1559,6 @@ task.spawn(function()
 	end
 end)
 
--- Avatar hero
 local loaderRing = make("Frame", {
 	Size = UDim2.fromOffset(92, 92),
 	Position = UDim2.new(0.5, 0, 0, 72),
@@ -1651,7 +1612,6 @@ make("TextLabel", {
 	ZIndex = 22,
 }).Parent = loaderCard
 
--- Progress panel
 local loaderPanel = make("Frame", {
 	Size = UDim2.new(1, -40, 0, 102),
 	Position = UDim2.fromOffset(20, 224),
@@ -1773,7 +1733,6 @@ local loaderSub = make("TextLabel", {
 })
 loaderSub.Parent = loaderPanel
 
--- Step dots
 local loaderDots = make("Frame", {
 	Size = UDim2.new(1, -40, 0, 8),
 	Position = UDim2.fromOffset(20, 336),
@@ -1833,7 +1792,6 @@ playLoader = function()
 	tween(loaderCard, Anim.Smooth, { GroupTransparency = 0 })
 	tween(loaderScale, Anim.Spring, { Scale = 1 })
 
-	-- Avatar entrance
 	loaderAvatar.Size = UDim2.fromOffset(60, 60)
 	loaderAvatar.Position = UDim2.new(0.5, 0, 0, 88)
 	tween(loaderAvatar, Anim.Spring, {
@@ -1933,7 +1891,6 @@ local accentDot = make("Frame", {
 accentDot.Parent = titleBar
 registerAccent(accentDot, "BackgroundColor3")
 
--- Soft glow behind accent dot
 local dotGlow = make("Frame", {
 	Size = UDim2.fromOffset(15, 15),
 	Position = UDim2.fromOffset(14.5, 16.5),
@@ -1944,9 +1901,8 @@ local dotGlow = make("Frame", {
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
--- Title + version sit side-by-side (version was previously fixed at x=118 for "EXODUS" only)
 local TITLE_LEFT = 36
-local TITLE_RIGHT_RESERVE = 230 -- fps / bell / win controls
+local TITLE_RIGHT_RESERVE = 230
 local VERSION_GAP = 8
 
 local titleLabel = make("TextLabel", {
@@ -1956,7 +1912,7 @@ local titleLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.GothamBold,
 	Text = "EXODUS",
-	TextSize = 15,
+	TextSize = isMobile and 13 or 15,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
@@ -1971,7 +1927,7 @@ local versionLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(TITLE_LEFT, 0),
 	Font = Enum.Font.Gotham,
 	Text = "v" .. LIBRARY_VERSION,
-	TextSize = 12,
+	TextSize = isMobile and 10 or 12,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	ZIndex = 4,
@@ -2001,7 +1957,6 @@ local function layoutTitleVersion()
 	end
 	if barW < 1 then return end
 	local reserve = TITLE_RIGHT_RESERVE
-	-- Compact mini chrome: right controls stay, but reserve less so title/version still fit
 	if minimized and barW < 420 then
 		reserve = math.min(reserve, math.max(160, barW * 0.55))
 	end
@@ -2019,10 +1974,6 @@ titleLabel:GetPropertyChangedSignal("Text"):Connect(layoutTitleVersion)
 titleBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutTitleVersion)
 task.defer(layoutTitleVersion)
 
--- Right chrome spacing (from right edge): controls → gap → bell → gap → fps
--- winControls width 70 @ -12 → occupies [W-82, W-12]
--- bell 26 @ -96 → [W-122, W-96]
--- fps 72 @ -136 → [W-208, W-136]
 local fpsPill = make("Frame", {
 	Size = UDim2.fromOffset(72, 22),
 	Position = UDim2.new(1, -136, 0.5, 0),
@@ -2069,7 +2020,6 @@ task.spawn(function()
 	conn:Disconnect()
 end)
 
--- Accent dot pulse
 task.spawn(function()
 	local pulse = TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	while accentDot.Parent do
@@ -2083,7 +2033,6 @@ task.spawn(function()
 	end
 end)
 
--- Chrome window controls (match silver panel — not blocky red squares)
 local winControls = make("Frame", {
 	Name = "WinControls",
 	Size = UDim2.fromOffset(70, 28),
@@ -2151,7 +2100,6 @@ local function setMinimizeIcon(name)
 	minimizeState.icon = drawIcon(minimizeBtn, name, minimizeState.idle, 12)
 end
 
--- divider between min / close
 make("Frame", {
 	Size = UDim2.fromOffset(1, 14),
 	Position = UDim2.fromOffset(34, 7),
@@ -2161,7 +2109,6 @@ make("Frame", {
 	ZIndex = 14,
 }).Parent = winControls
 
--- Divider under title with edge fade
 local titleDiv = make("Frame", {
 	Size = UDim2.new(1, -24, 0, 1),
 	Position = UDim2.fromOffset(12, MINI_H - 1),
@@ -2179,14 +2126,14 @@ make("UIGradient", {
 	}),
 }).Parent = titleDiv
 
--- ============ WINDOW SHELL (drag / snap / resize / dbl-click) ============
+-- ============ WINDOW SHELL (touch‑friendly drag/resize) ============
 local targetPos = root.Position
 local resizing = false
 local resizeEdge = nil
 local resizePads = {}
 local lastTitleClick = 0
-local preMinimizeSize = nil -- restored on expand
-local minimizeWindow -- forward
+local preMinimizeSize = nil
+local minimizeWindow
 local setWindowPinned
 local setSizePreset
 local setFullscreen
@@ -2196,7 +2143,6 @@ local applyWindowOpacity
 local function computeMiniWidth()
 	local titleW = math.min(measureLabelWidth(titleLabel, 9), 140)
 	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
-	-- left cluster + gap + fps(72) + gap + bell(26) + gap + controls(70) + pads
 	local left = TITLE_LEFT + titleW + VERSION_GAP + verW + 16
 	local right = 72 + 10 + 26 + 14 + 70 + 14
 	return math.clamp(math.floor(left + right), 300, math.max(WIN_W, 300))
@@ -2218,7 +2164,6 @@ local function setResizeEnabled(on)
 end
 
 local function normalizeRootOffset()
-	-- Keep offset-only top-left; never remap via AbsolutePosition (breaks gethui / nil Absolute*)
 	root.AnchorPoint = Vector2.new(0, 0)
 	if root.Position.X.Scale ~= 0 or root.Position.Y.Scale ~= 0 then
 		local vp = getViewport()
@@ -2234,24 +2179,6 @@ local function getViewport()
 	return cam and cam.ViewportSize or Vector2.new(1920, 1080)
 end
 
-local function absRootPos()
-	local pos, size
-	local ok = pcall(function()
-		pos = root.AbsolutePosition
-		size = root.AbsoluteSize
-	end)
-	if ok and typeof(pos) == "Vector2" and typeof(size) == "Vector2" then
-		return pos, size
-	end
-	return Vector2.new(root.Position.X.Offset, root.Position.Y.Offset), Vector2.new(root.Size.X.Offset, root.Size.Y.Offset)
-end
-
-local function setRootOffset(x, y)
-	root.AnchorPoint = Vector2.new(0, 0)
-	targetPos = UDim2.fromOffset(x, y)
-	root.Position = targetPos
-end
-
 local function snapPosition(x, y, w, h)
 	if not Flags.EdgeSnap then return x, y end
 	local vp = getViewport()
@@ -2265,7 +2192,6 @@ local function snapPosition(x, y, w, h)
 end
 
 local function rememberWindowGeometry()
-	-- Never persist minimized / broken sizes (this was collapsing the whole UI)
 	if minimized then return end
 	local w = root.Size.X.Offset
 	local h = root.Size.Y.Offset
@@ -2281,10 +2207,11 @@ local function rememberWindowGeometry()
 	task.defer(saveConfigFile)
 end
 
--- Drag handle covers title (leave right side for FPS / bell / chrome)
+-- Drag handle (larger on mobile)
+local dragHandleSize = isMobile and UDim2.new(1, -240, 1, 0) or UDim2.new(1, -220, 1, 0)
 local dragHandle = make("TextButton", {
 	Name = "DragHandle",
-	Size = UDim2.new(1, -220, 1, 0),
+	Size = dragHandleSize,
 	Position = UDim2.fromOffset(0, 0),
 	BackgroundTransparency = 1,
 	Text = "",
@@ -2391,17 +2318,31 @@ do
 		beginDrag(m.X, m.Y)
 	end
 
-	-- MouseButton1Down is the most reliable start signal in executors
 	dragHandle.MouseButton1Down:Connect(tryBegin)
 	dragHandle.MouseButton1Up:Connect(function()
 		if dragging then stopDrag() end
 	end)
 
+	-- Touch support (InputBegan with Touch)
+	local function onTouchBegan(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			local pos = input.Position
+			beginDrag(pos.X, pos.Y)
+		end
+	end
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.UserInputType == Enum.UserInputType.Touch then
+			onTouchBegan(input)
+		end
+	end)
+
 	UserInputService.InputChanged:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-		if resizing then
-			local mouse = UserInputService:GetMouseLocation()
-			applyResizeAt(mouse.X, mouse.Y)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			if resizing then
+				local mouse = UserInputService:GetMouseLocation()
+				applyResizeAt(mouse.X, mouse.Y)
+			end
 		end
 	end)
 
@@ -2418,7 +2359,6 @@ do
 		end
 	end)
 
-	-- Drive drag/resize every frame (InputChanged is unreliable in many executors / gethui)
 	RunService.RenderStepped:Connect(function()
 		local m = UserInputService:GetMouseLocation()
 		if dragging then
@@ -2431,44 +2371,42 @@ end
 
 targetPos = root.Position
 
--- Resize hit pads
-do
-	local edges = {
-		{ "l", UDim2.new(0, 4, 1, -16), UDim2.fromOffset(0, 8) },
-		{ "r", UDim2.new(0, 4, 1, -16), UDim2.new(1, -4, 0, 8) },
-		{ "t", UDim2.new(1, -16, 0, 4), UDim2.fromOffset(8, 0) },
-		{ "b", UDim2.new(1, -16, 0, 4), UDim2.new(0, 8, 1, -4) },
-		{ "tl", UDim2.fromOffset(8, 8), UDim2.fromOffset(0, 0) },
-		{ "tr", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 0, 0) },
-		{ "bl", UDim2.fromOffset(8, 8), UDim2.new(0, 0, 1, -8) },
-		{ "br", UDim2.fromOffset(8, 8), UDim2.new(1, -8, 1, -8) },
-	}
-	for _, e in ipairs(edges) do
-		local pad = make("TextButton", {
-			Name = "Resize_" .. e[1],
-			Size = e[2],
-			Position = e[3],
-			BackgroundTransparency = 1,
-			Text = "",
-			ZIndex = 80,
-			AutoButtonColor = false,
-			Active = true,
-		})
-		pad.Parent = root
-		resizePads[#resizePads + 1] = pad
-		pad.InputBegan:Connect(function(input)
-			if Flags.LockLayout or Flags.Fullscreen or minimized then return end
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				normalizeRootOffset()
-				resizing = true
-				resizeEdge = e[1]
-				State.lastInteraction = os.clock()
-			end
-		end)
-	end
+-- Resize pads (larger on mobile)
+local padSize = isMobile and 12 or 8
+local edges = {
+	{ "l", UDim2.new(0, padSize, 1, -16), UDim2.fromOffset(0, 8) },
+	{ "r", UDim2.new(0, padSize, 1, -16), UDim2.new(1, -padSize, 0, 8) },
+	{ "t", UDim2.new(1, -16, 0, padSize), UDim2.fromOffset(8, 0) },
+	{ "b", UDim2.new(1, -16, 0, padSize), UDim2.new(0, 8, 1, -padSize) },
+	{ "tl", UDim2.fromOffset(padSize, padSize), UDim2.fromOffset(0, 0) },
+	{ "tr", UDim2.fromOffset(padSize, padSize), UDim2.new(1, -padSize, 0, 0) },
+	{ "bl", UDim2.fromOffset(padSize, padSize), UDim2.new(0, 0, 1, -padSize) },
+	{ "br", UDim2.fromOffset(padSize, padSize), UDim2.new(1, -padSize, 1, -padSize) },
+}
+for _, e in ipairs(edges) do
+	local pad = make("TextButton", {
+		Name = "Resize_" .. e[1],
+		Size = e[2],
+		Position = e[3],
+		BackgroundTransparency = 1,
+		Text = "",
+		ZIndex = 80,
+		AutoButtonColor = false,
+		Active = true,
+	})
+	pad.Parent = root
+	resizePads[#resizePads + 1] = pad
+	pad.InputBegan:Connect(function(input)
+		if Flags.LockLayout or Flags.Fullscreen or minimized then return end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			normalizeRootOffset()
+			resizing = true
+			resizeEdge = e[1]
+			State.lastInteraction = os.clock()
+		end
+	end)
 end
 
--- Restore saved geometry (reject minimized/corrupt sizes)
 pcall(function()
 	local w = ConfigData.window
 	if w and type(w.size) == "table" then
@@ -2478,7 +2416,6 @@ pcall(function()
 			WIN_W, WIN_H = math.floor(rw), math.floor(rh)
 			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
 		else
-			-- wipe bad saved size (e.g. height == MINI_H from minimize)
 			ConfigData.window.size = { WIN_W, WIN_H }
 		end
 	end
@@ -2486,7 +2423,6 @@ pcall(function()
 		root.AnchorPoint = Vector2.new(0, 0)
 		local sx, ox = tonumber(w.pos[1]) or 0, tonumber(w.pos[2]) or 0
 		local sy, oy = tonumber(w.pos[3]) or 0, tonumber(w.pos[4]) or 0
-		-- Prefer offset-only positions (scale positions break grab-drag)
 		if sx == 0 and sy == 0 then
 			root.Position = UDim2.fromOffset(ox, oy)
 		else
@@ -2502,7 +2438,6 @@ pcall(function()
 end)
 
 -- ============ BODY ============
--- Fill remaining space under title bar (never bake a fixed BODY_H from a bad WIN_H)
 local body = make("Frame", {
 	Name = "Body",
 	Size = UDim2.new(1, 0, 1, -MINI_H),
@@ -2540,7 +2475,6 @@ make("UIPadding", {
 	PaddingRight = UDim.new(0, 8),
 }).Parent = tabHolder
 
--- NAV label above tabs
 local navLabel = make("TextLabel", {
 	Size = UDim2.new(1, -8, 0, 18),
 	BackgroundTransparency = 1,
@@ -2563,7 +2497,7 @@ local tabIndicator = make("Frame", {
 }, { corner(1) })
 tabIndicator.Parent = sidebar
 registerAccent(tabIndicator, "BackgroundColor3")
--- Soft silver fill track (no bloom / glow pulse)
+
 local tabIndicatorGlow = make("Frame", {
 	Size = UDim2.fromOffset(3, 28),
 	Position = UDim2.fromOffset(0, 0),
@@ -2575,7 +2509,6 @@ local tabIndicatorGlow = make("Frame", {
 tabIndicatorGlow.Parent = tabIndicator
 registerAccent(tabIndicatorGlow, "BackgroundColor3")
 
--- Upgraded profile card
 local userCard = make("Frame", {
 	Size = UDim2.new(1, -16, 0, 62),
 	Position = UDim2.new(0, 8, 1, -70),
@@ -2626,7 +2559,7 @@ local displayNameLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(52, 10),
 	Font = Enum.Font.GothamBold,
 	Text = DISPLAY_NAME,
-	TextSize = 12,
+	TextSize = isMobile and 10 or 12,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
@@ -2641,7 +2574,7 @@ local userNameLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(52, 26),
 	Font = Enum.Font.Gotham,
 	Text = "@" .. USER_NAME,
-	TextSize = 10,
+	TextSize = isMobile and 8 or 10,
 	TextColor3 = Theme.Accent,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
@@ -2657,7 +2590,7 @@ local hintLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(52, 42),
 	Font = Enum.Font.Gotham,
 	Text = "RightShift — hide",
-	TextSize = 9,
+	TextSize = isMobile and 8 or 9,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
@@ -2665,13 +2598,9 @@ local hintLabel = make("TextLabel", {
 })
 hintLabel.Parent = userCard
 
--- Clip profile text cleanly when sidebar collapses
 userCard.ClipsDescendants = true
-
--- Give tab list room for taller profile card
 tabHolder.Size = UDim2.new(1, 0, 1, -78)
 
--- Content lives on its own raised surface panel
 local contentPanel = make("Frame", {
 	Name = "ContentPanel",
 	Size = UDim2.new(1, -168, 1, -12),
@@ -2691,10 +2620,10 @@ local contentArea = make("Frame", {
 })
 contentArea.Parent = contentPanel
 
--- Status bar: live clock + player name
+-- ============ STATUS BAR WITH WATERMARK ============
 local contentFooter = make("Frame", {
-	Size = UDim2.new(1, -16, 0, 20),
-	Position = UDim2.new(0, 8, 1, -24),
+	Size = UDim2.new(1, -16, 0, isMobile and 28 or 24),
+	Position = UDim2.new(0, 8, 1, -(isMobile and 30 or 26)),
 	BackgroundColor3 = Theme.Element,
 	BackgroundTransparency = 0.35,
 	BorderSizePixel = 0,
@@ -2702,56 +2631,67 @@ local contentFooter = make("Frame", {
 }, { corner(5), stroke(Theme.Stroke, 1, 0.55) })
 contentFooter.Parent = contentPanel
 
+local footerLayout = make("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+	HorizontalAlignment = Enum.HorizontalAlignment.Left,
+	Padding = UDim.new(0, 8),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+})
+footerLayout.Parent = contentFooter
+
+local footerPad = make("UIPadding", {
+	PaddingLeft = UDim.new(0, 8),
+	PaddingRight = UDim.new(0, 8),
+})
+footerPad.Parent = contentFooter
+
 local statusDot = make("Frame", {
 	Size = UDim2.fromOffset(5, 5),
-	Position = UDim2.fromOffset(8, 7),
 	BackgroundColor3 = Theme.Success,
 	ZIndex = 4,
+	LayoutOrder = 1,
 }, { corner(3) })
 statusDot.Parent = contentFooter
 softPulse(statusDot, "BackgroundTransparency", 0, 0.5, 1.4)
 
 local statusPlayerLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
-	Size = UDim2.new(0.55, -12, 1, 0),
-	Position = UDim2.fromOffset(18, 0),
 	Font = Enum.Font.GothamMedium,
 	Text = DISPLAY_NAME .. "  ·  @" .. USER_NAME,
-	TextSize = 10,
+	TextSize = isMobile and 9 or 10,
 	TextColor3 = Theme.Text,
 	TextTransparency = 0.15,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextTruncate = Enum.TextTruncate.AtEnd,
+	LayoutOrder = 2,
 	ZIndex = 4,
 })
 statusPlayerLabel.Parent = contentFooter
 
 local statusClockLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
-	Size = UDim2.new(0.45, -10, 1, 0),
-	Position = UDim2.new(0.55, 0, 0, 0),
 	Font = Enum.Font.Gotham,
 	Text = "--:--:--",
-	TextSize = 10,
+	TextSize = isMobile and 9 or 10,
 	TextColor3 = Theme.SubText,
 	TextTransparency = 0.1,
-	TextXAlignment = Enum.TextXAlignment.Right,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	LayoutOrder = 3,
 	ZIndex = 4,
 })
 statusClockLabel.Parent = contentFooter
 
--- ====== WATERMARK: UI made by @rebornlrd ======
 local watermarkLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
-	Size = UDim2.new(0.25, -10, 1, 0),
-	Position = UDim2.new(0.75, 0, 0, 0),
 	Font = Enum.Font.Gotham,
 	Text = "UI made by @rebornlrd",
-	TextSize = 9,
+	TextSize = isMobile and 7 or 9,
 	TextColor3 = Theme.SubText,
 	TextTransparency = 0.5,
 	TextXAlignment = Enum.TextXAlignment.Right,
 	TextTruncate = Enum.TextTruncate.AtEnd,
+	LayoutOrder = 4,
 	ZIndex = 4,
 })
 watermarkLabel.Parent = contentFooter
@@ -2763,7 +2703,6 @@ task.spawn(function()
 	end
 end)
 
--- L-brackets on body (hidden when minimized via clip)
 do
 	local marks = {
 		{ UDim2.fromOffset(4, 4), UDim2.fromOffset(16, 2) },
@@ -2788,8 +2727,8 @@ end
 -- ============ NOTIFICATION SYSTEM ============
 local notify, dismissNotif, activeNotifs
 (function()
-local NOTIF_W = 320
-local MAX_NOTIFS = 5
+local NOTIF_W = isMobile and 280 or 320
+local MAX_NOTIFS = isMobile and 4 or 5
 local notifCounter = 0
 
 local notifArea = make("Frame", {
@@ -2920,7 +2859,6 @@ notify = function(title, body, kind, duration, opts)
 	local uiScale = make("UIScale", { Scale = 0.96 })
 	uiScale.Parent = toast
 
-	-- Surface
 	make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
@@ -2938,7 +2876,6 @@ notify = function(title, body, kind, duration, opts)
 		}),
 	}).Parent = toast
 
-	-- Status rail
 	make("Frame", {
 		Size = UDim2.new(0, 3, 1, -12),
 		Position = UDim2.fromOffset(0, 6),
@@ -2947,7 +2884,6 @@ notify = function(title, body, kind, duration, opts)
 		ZIndex = 3,
 	}, { corner(2) }).Parent = toast
 
-	-- Icon
 	local iconBubble = make("Frame", {
 		Size = UDim2.fromOffset(32, 32),
 		Position = UDim2.fromOffset(12, 12),
@@ -2959,7 +2895,6 @@ notify = function(title, body, kind, duration, opts)
 		drawIcon(iconBubble, info.icon, color, 14)
 	end)
 
-	-- Type
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.fromOffset(48, 12),
@@ -2972,7 +2907,6 @@ notify = function(title, body, kind, duration, opts)
 		ZIndex = 5,
 	}).Parent = toast
 
-	-- Title
 	make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -100, 0, 16),
@@ -2986,7 +2920,6 @@ notify = function(title, body, kind, duration, opts)
 		ZIndex = 5,
 	}).Parent = toast
 
-	-- Body
 	if hasBody then
 		make("TextLabel", {
 			BackgroundTransparency = 1,
@@ -3015,7 +2948,6 @@ notify = function(title, body, kind, duration, opts)
 		}).Parent = toast
 	end
 
-	-- Close
 	local closeBtn = make("TextButton", {
 		Size = UDim2.fromOffset(20, 20),
 		Position = UDim2.new(1, -26, 0, 28),
@@ -3030,7 +2962,6 @@ notify = function(title, body, kind, duration, opts)
 	}, { corner(5) })
 	closeBtn.Parent = toast
 
-	-- Timer
 	local barTrack = make("Frame", {
 		Size = UDim2.new(1, -2, 0, 2),
 		Position = UDim2.new(0, 1, 1, -2),
@@ -3139,7 +3070,6 @@ notify = function(title, body, kind, duration, opts)
 		end)
 	end
 
-	-- Slide in from the right with spring + soft accent flash
 	toast.Position = UDim2.fromOffset(36, 0)
 	uiScale.Scale = 0.9
 	tween(wrapper, Anim.Spring, { Size = UDim2.fromOffset(NOTIF_W, toastH + 2) })
@@ -3264,7 +3194,7 @@ local tabDefaults = {
 	Settings = { color = Color3.fromRGB(140, 140, 150), icon = "settings", sub = "Options" },
 }
 
-local bindTabAPI -- forward decl; filled after control factories
+local bindTabAPI
 
 local function createTab(nameOrConfig)
 	local cfg = (type(nameOrConfig) == "table") and nameOrConfig or { Title = tostring(nameOrConfig) }
@@ -3306,9 +3236,7 @@ local function createTab(nameOrConfig)
 	})
 	iconBg.Parent = btn
 
-	-- Drawn icon (or rbxasset image via Icon / Image)
 	local iconApi = drawIcon(iconBg, iconName, iconColor, 15)
-	-- Keep a dummy label so older switchTab color tweens don't nil-index
 	local iconGlyph = make("TextLabel", {
 		Name = "IconGlyph",
 		BackgroundTransparency = 1,
@@ -3319,7 +3247,6 @@ local function createTab(nameOrConfig)
 	})
 	iconGlyph.Parent = iconBg
 
-	-- Leave ~56px on the right for badge; icon→text gap is intentional
 	local label = make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -96, 0, 16),
@@ -3370,7 +3297,7 @@ local function createTab(nameOrConfig)
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = isMobile and 4 or 3,
 		ScrollBarImageColor3 = Theme.Accent,
 		ScrollBarImageTransparency = 0.45,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -3431,7 +3358,7 @@ local function createTab(nameOrConfig)
 end
 
 -- ============ CONTROLS ============
-local showConfirmModal -- assigned later (confirm modal)
+local showConfirmModal
 local order = 0
 local function nextOrder()
 	order = order + 1
@@ -3608,13 +3535,13 @@ local function createButton(tab, text, callback, primary, opts)
 		textColor = Theme.SubText
 	end
 
-	local rowH = Flags.LargeHitboxes and 46 or 40
+	local rowH = Flags.LargeHitboxes and (isMobile and 52 or 46) or (isMobile and 44 or 40)
 	local btn = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = baseColor,
 		Text = "",
 		Font = State.uiFont,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = textColor,
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
@@ -3681,7 +3608,7 @@ local function createButton(tab, text, callback, primary, opts)
 		AutomaticSize = Enum.AutomaticSize.X,
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = textColor,
 		LayoutOrder = 2,
 		ZIndex = 5,
@@ -3708,7 +3635,6 @@ local function createButton(tab, text, callback, primary, opts)
 	local spinStroke = stroke(isPrimary and primaryText or Theme.Accent, 2, 0.15)
 	spinStroke.Parent = spin
 	make("UICorner", { CornerRadius = UDim.new(1, 0) }).Parent = spin
-	-- cut arc illusion
 	make("Frame", {
 		Size = UDim2.fromOffset(8, 8),
 		Position = UDim2.fromOffset(-2, -2),
@@ -3800,8 +3726,8 @@ local function createToggle(tab, text, default, callback, opts)
 	local state = default or false
 	if flag and ConfigData.values[flag] ~= nil then state = ConfigData.values[flag] and true or false end
 
-	local rowH = Flags.LargeHitboxes and 44 or 38
-	if desc and desc ~= "" then rowH = math.max(rowH, 52) end
+	local rowH = Flags.LargeHitboxes and (isMobile and 50 or 44) or (isMobile and 44 or 38)
+	if desc and desc ~= "" then rowH = math.max(rowH, isMobile and 60 or 52) end
 
 	local holder = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
@@ -3822,7 +3748,7 @@ local function createToggle(tab, text, default, callback, opts)
 		Position = UDim2.fromOffset(14, desc and 4 or 0),
 		Font = State.uiFont,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	})
@@ -3835,7 +3761,7 @@ local function createToggle(tab, text, default, callback, opts)
 			Position = UDim2.new(0, 14, 1, -20),
 			Font = Enum.Font.Gotham,
 			Text = desc,
-			TextSize = 10,
+			TextSize = isMobile and 9 or 10,
 			TextColor3 = Theme.SubText,
 			TextTransparency = 0.15,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -3890,7 +3816,6 @@ local function createToggle(tab, text, default, callback, opts)
 			end
 			api.Set(true)
 		elseif group and state then
-			-- radio: keep one on
 			return
 		else
 			api.Set(not state)
@@ -3935,7 +3860,7 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 		Position = UDim2.fromOffset(14, 6),
 		Font = State.uiFont,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -4065,8 +3990,6 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 			tween(knob, Anim.Spring, { Size = UDim2.fromOffset(17, 17) })
 			setFromX(input.Position.X)
 		elseif input.UserInputType == Enum.UserInputType.MouseWheel and hovering then
-			local dir = input.Position.Z
-			-- Position.Z not always wheel; use InputChanged below
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(input)
@@ -4153,7 +4076,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 		Position = UDim2.fromOffset(14, 0),
 		Font = State.uiFont,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = top
@@ -4164,7 +4087,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 		Position = UDim2.new(0.42, 0, 0, 0),
 		Font = Enum.Font.Gotham,
 		Text = displayText(),
-		TextSize = 12,
+		TextSize = isMobile and 11 or 12,
 		TextColor3 = Theme.SubText,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextTruncate = Enum.TextTruncate.AtEnd,
@@ -4191,7 +4114,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 		PlaceholderText = "Search…",
 		PlaceholderColor3 = Theme.SubText,
 		Text = "",
-		TextSize = 12,
+		TextSize = isMobile and 11 or 12,
 		TextColor3 = Theme.Text,
 		Visible = false,
 		ClearTextOnFocus = false,
@@ -4203,7 +4126,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 		Position = UDim2.fromOffset(8, closedH + (useSearch and searchH or 0)),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = isMobile and 4 or 3,
 		CanvasSize = UDim2.new(0, 0, 0, #options * optH),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	})
@@ -4238,7 +4161,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 					BackgroundTransparency = on and 0 or 1,
 					Text = (multi and (on and "[x] " or "[ ] ") or "  ") .. opt,
 					Font = Enum.Font.Gotham,
-					TextSize = 12,
+					TextSize = isMobile and 11 or 12,
 					TextColor3 = on and Theme.Text or Theme.SubText,
 					TextXAlignment = Enum.TextXAlignment.Left,
 					AutoButtonColor = false,
@@ -4335,7 +4258,7 @@ local function createTextbox(tab, text, placeholder, callback)
 		Position = UDim2.fromOffset(14, 0),
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -4349,7 +4272,7 @@ local function createTextbox(tab, text, placeholder, callback)
 		PlaceholderText = placeholder or "",
 		PlaceholderColor3 = Theme.SubText,
 		Text = "",
-		TextSize = 12,
+		TextSize = isMobile and 11 or 12,
 		TextColor3 = Theme.Text,
 		ClearTextOnFocus = false,
 	}, { corner(5), stroke(Theme.Stroke, 1, 0.4) })
@@ -4415,7 +4338,7 @@ local function createKeybind(tab, text, defaultKey, callback, opts)
 		Position = UDim2.fromOffset(14, 0),
 		Font = State.uiFont,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -4541,7 +4464,7 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 		Position = UDim2.fromOffset(14, 0),
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = top
@@ -4719,7 +4642,6 @@ local function createColorPicker(tab, text, defaultColor, callback, opts)
 				picking = false
 				eyeBtn.Text = "Eyedrop"
 				if conn then conn:Disconnect() end
-				-- sample accent-soft fallback (no pixel API in most executors)
 				local c = Theme.Accent
 				h = select(1, c:ToHSV())
 				hueKnob.Position = UDim2.new(h, 0, 0.5, 0)
@@ -4776,10 +4698,9 @@ local function setAccent(color)
 	end
 end
 
--- Soft warm silver (premium reads cleaner than standard, not flashy gold)
 local PREMIUM_ACCENT = Color3.fromRGB(214, 204, 168)
 local STANDARD_ACCENT = Color3.fromRGB(198, 198, 208)
-local Exodus -- forward declare for applyPremiumMode sync
+local Exodus
 
 local function ensurePremiumBadge()
 	if State.premiumBadge and State.premiumBadge.Parent then return State.premiumBadge end
@@ -4822,12 +4743,10 @@ local function applyPremiumMode(on, opts)
 
 	if on then
 		setAccent(opts.Accent or PREMIUM_ACCENT)
-		-- Slightly snappier motion (subtle)
 		Anim.Fast = TweenInfo.new(0.11, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		Anim.Smooth = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		Anim.Soft = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		Anim.Shine = TweenInfo.new(0.48, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		-- Thin accent line at top of window
 		pcall(function()
 			if not window:FindFirstChild("PremiumWash") then
 				local wash = make("Frame", {
@@ -4882,7 +4801,7 @@ local function createProgress(tab, text, value0to100)
 		Position = UDim2.fromOffset(14, 8),
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -4956,7 +4875,7 @@ local function createSegmented(tab, text, options, default, callback, opts)
 		Position = UDim2.fromOffset(14, 8),
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -5172,7 +5091,7 @@ local function createSpinner(tab, text)
 		Position = UDim2.fromOffset(14, 0),
 		Font = Enum.Font.GothamMedium,
 		Text = text,
-		TextSize = 13,
+		TextSize = isMobile and 12 or 13,
 		TextColor3 = Theme.Text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
@@ -5873,7 +5792,7 @@ end
 	}
 end)()
 
--- ============ TAB API (universal) ============
+-- ============ TAB API ============
 bindTabAPI = function(tab)
 	function tab:AddSection(text)
 		return createLabel(self, text)
@@ -5949,7 +5868,6 @@ bindTabAPI = function(tab)
 		return V5.createInfoGrid(self, items)
 	end
 	function tab:AddActionRow(actions)
-		-- Accept both { text, callback, primary, danger } and { Title, Callback, Primary, Danger }
 		local normalized = {}
 		for i, a in ipairs(actions or {}) do
 			normalized[i] = {
@@ -5966,7 +5884,6 @@ bindTabAPI = function(tab)
 		return V5.createMetricPanel(self, opts.Title or "Metrics", opts.Metrics or opts.Items or {})
 	end
 	function tab:AddStatRow(opts)
-		-- Compact horizontal status row (Target / FOV / Mode style)
 		opts = opts or {}
 		local metrics = opts.Metrics or opts.Items or opts.Stats or {}
 		local mapped = {}
@@ -6072,7 +5989,6 @@ end
 
 -- ============ WINDOW LIFECYCLE ============
 local uiVisible = true
--- minimized declared earlier (near WIN_W) for resize/title layout
 local hasCelebrated = false
 local toggleKey = Enum.KeyCode.RightShift
 
@@ -6117,12 +6033,10 @@ local function destroyGui()
 end
 
 local function showWindow()
-	-- Block boot/show while KeySystem prompt is open
 	if State.keyGateActive then return end
 	root.Visible = true
 	window.Visible = true
 	if windowRim then windowRim.Visible = true end
-	-- restore remembered geometry — always top-left anchor for correct dragging
 	root.AnchorPoint = Vector2.new(0, 0)
 	if State.savedWindowPos then
 		root.Position = State.savedWindowPos
@@ -6206,10 +6120,6 @@ end)
 local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
 (function()
--- ============ EXODUS V6 CHUNK (splice into FluentGui.lua, same scope) ============
--- Place AFTER: local minimized / window shell / createTab / notify / tabs exist.
--- bindTabAPI / createTab should call enhanceTab(tab) — wrapper below also does this.
-
 -- ---- 1) Confirm modal ----
 showConfirmModal = function(title, body, onYes)
 	pcall(function()
@@ -6296,7 +6206,7 @@ showConfirmModal = function(title, body, onYes)
 	return overlay
 end
 
--- ---- 2) Window shell helpers (assign to forward decls) ----
+-- ---- 2) Window shell helpers ----
 local sizePresets = {
 	Compact = { 480, 340 },
 	Normal = { 610, 430 },
@@ -6310,7 +6220,6 @@ local sidebarCollapseToken = 0
 minimizeWindow = function()
 	local info = Anim.Minimize or Anim.Soft or Anim.Smooth
 	if not minimized then
-		-- collapsing → compact title pill
 		local w = root.Size.X.Offset
 		local h = root.Size.Y.Offset
 		if w >= 420 and h >= 280 then
@@ -6339,7 +6248,6 @@ minimizeWindow = function()
 			task.defer(layoutTitleVersion)
 		end)
 	else
-		-- expanding → restore previous size
 		minimized = false
 		local target = preMinimizeSize or State.savedWindowSize
 		if not target or target.Y.Offset < 280 or target.X.Offset < 420 then
@@ -6420,7 +6328,7 @@ setFullscreen = function(on)
 			root.Size = UDim2.fromOffset(WIN_W, WIN_H)
 			minimized = false
 			if body then body.Visible = true end
-			setResizeEnabled(false) -- fullscreen: no edge resize
+			setResizeEnabled(false)
 			setMinimizeIcon("minus")
 		else
 			if preFullscreen then
@@ -6456,7 +6364,6 @@ setSidebarCollapsed = function(on)
 			})
 		end
 
-		-- Nav chrome
 		if navLabel then
 			if on then
 				tween(navLabel, Anim.Fast, { TextTransparency = 1 })
@@ -6477,7 +6384,6 @@ setSidebarCollapsed = function(on)
 			tabIndicator.Visible = not on
 		end
 
-		-- Profile: icon-only when collapsed
 		local function fadeLabel(lbl, hide)
 			if not lbl then return end
 			if hide then
@@ -6584,7 +6490,6 @@ setSidebarCollapsed = function(on)
 	return Flags.SidebarCollapsed
 end
 
--- Hover expand / leave collapse (library feature)
 pcall(function()
 	sidebar.MouseEnter:Connect(function()
 		sidebarCollapseToken = sidebarCollapseToken + 1
@@ -6618,8 +6523,6 @@ applyWindowOpacity = function(amount)
 	end)
 	return State.windowOpacity
 end
-
--- Wire minimizeBtn to minimizeWindow() where you splice (replace existing click handler).
 
 -- ---- 3) Tab management ----
 local function tabIndex(tab)
@@ -6680,7 +6583,6 @@ end
 local function toggleFavorite(tab)
 	if not tab then return end
 	tab.Favorite = not tab.Favorite
-	-- No FavMark UI — stars were the yellow corner dots
 	pcall(function()
 		if tab.Button then
 			local star = tab.Button:FindFirstChild("FavMark")
@@ -6854,15 +6756,13 @@ local function showTabContextMenu(tab, x, y)
 	return menu
 end
 
--- ---- 5) enhanceTab + wrap createTab ----
--- NOTE: bindTabAPI and createTab should call enhanceTab(tab) after building the tab.
+-- ---- 5) enhanceTab ----
 enhanceTab = function(tab)
 	if not tab or tab._v6Enhanced then return tab end
 	tab._v6Enhanced = true
 	local btn = tab.Button
 	if not btn then return tab end
 
-	-- Favorite stars removed (looked like yellow dots on tabs)
 	tab.FavMark = nil
 	pcall(function()
 		local oldFav = btn:FindFirstChild("FavMark")
@@ -6921,7 +6821,6 @@ enhanceTab = function(tab)
 		return toggleFavorite(self)
 	end
 
-	-- drag reorder
 	pcall(function()
 		local dragging = false
 		btn.InputBegan:Connect(function(inp)
@@ -6974,7 +6873,7 @@ do
 	end
 end
 
--- ---- 6) Ctrl+Tab / Ctrl+Shift+Tab ----
+-- ---- 6) Ctrl+Tab ----
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.Tab then
@@ -6988,7 +6887,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 -- ---- 7) Notification upgrades ----
-local notifMode = "normal" -- normal | silent | dnd | compact
+local notifMode = "normal"
 
 local function pushNotifHistory(entry)
 	pcall(function()
@@ -7141,7 +7040,7 @@ local function createBellAndHistory()
 		Size = UDim2.new(1, -8, 1, -36),
 		Position = UDim2.fromOffset(4, 32),
 		BackgroundTransparency = 1,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = isMobile and 4 or 3,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ZIndex = 191,
@@ -7548,7 +7447,7 @@ local function createTreeView(tab, title, nodes, callback)
 		Size = UDim2.new(1, -12, 1, -28),
 		Position = UDim2.fromOffset(6, 26),
 		BackgroundTransparency = 1,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = isMobile and 4 or 3,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 	})
@@ -7748,7 +7647,7 @@ local function createFileBrowser(tab, title, files, callback)
 		Size = UDim2.new(1, -12, 1, -28),
 		Position = UDim2.fromOffset(6, 26),
 		BackgroundTransparency = 1,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = isMobile and 4 or 3,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 	})
@@ -7938,7 +7837,7 @@ local function hotReload()
 	return false
 end
 
--- ---- 11) Easter egg: typed "exodus" ----
+-- ---- 11) Easter egg ----
 do
 	local buf = ""
 	UserInputService.InputBegan:Connect(function(input, processed)
@@ -7996,7 +7895,6 @@ createFOVOverlay = function(opts)
 	local idleColor = color
 	local t = 0
 
-	-- Outer soft glow (matches window silver bloom)
 	local glow = Instance.new("Frame")
 	glow.Name = "Glow"
 	glow.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -8024,7 +7922,6 @@ createFOVOverlay = function(opts)
 	ring.Parent = gui
 	Instance.new("UICorner", ring).CornerRadius = UDim.new(1, 0)
 
-	-- Glass fill — UI dark layer tinted with accent
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.BackgroundColor3 = matchTheme and Theme.Background or color
@@ -8042,7 +7939,6 @@ createFOVOverlay = function(opts)
 	fillAccent.Parent = fill
 	Instance.new("UICorner", fillAccent).CornerRadius = UDim.new(1, 0)
 
-	-- Dual stroke like the main window rim
 	local strokeOuter = Instance.new("UIStroke")
 	strokeOuter.Name = "Outer"
 	strokeOuter.Color = matchTheme and Theme.Stroke or color
@@ -8064,17 +7960,16 @@ createFOVOverlay = function(opts)
 	strokeInner.Transparency = 0.78
 	strokeInner.Parent = ring
 
-	-- Cardinal ticks (crosshair language matching sidebar ticks)
 	local ticks = Instance.new("Folder")
 	ticks.Name = "Ticks"
 	ticks.Parent = ring
 	local tickFrames = {}
 	if showTicks then
 		local specs = {
-			{ 0.5, 0, 0.5, 0 }, -- N
-			{ 0.5, 1, 0.5, 1 }, -- S
-			{ 0, 0.5, 0, 0.5 }, -- W
-			{ 1, 0.5, 1, 0.5 }, -- E
+			{ 0.5, 0, 0.5, 0 },
+			{ 0.5, 1, 0.5, 1 },
+			{ 0, 0.5, 0, 0.5 },
+			{ 1, 0.5, 1, 0.5 },
 		}
 		for i, s in ipairs(specs) do
 			local vertical = (i <= 2)
@@ -8093,7 +7988,6 @@ createFOVOverlay = function(opts)
 		end
 	end
 
-	-- Tiny center pip
 	local pip = Instance.new("Frame")
 	pip.Name = "Pip"
 	pip.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -8177,7 +8071,6 @@ createFOVOverlay = function(opts)
 		SetLocked = function(on)
 			lockedOn = on and true or false
 			if lockedOn then
-				-- Target acquired: success tint (still silver-family)
 				local lockCol = Theme.Success:Lerp(Theme.Accent, 0.35)
 				strokeObj.Color = lockCol
 				fillAccent.BackgroundColor3 = lockCol
@@ -8214,7 +8107,6 @@ createFOVOverlay = function(opts)
 			strokeOuter.Thickness = thickness + 0.8
 			fill.BackgroundTransparency = matchTheme and math.max(fillT, 0.88) or fillT
 			if syncAccent and matchTheme then
-				-- keep live with Theme.Accent when user changes it via picker
 				if strokeObj.Color ~= Theme.Accent and opts.Color == nil then
 					applyColor(Theme.Accent)
 				end
@@ -8392,7 +8284,6 @@ applyV6PublicAPI = function(Exodus)
 		if e then table.insert(State.undoStack, e); return e end
 	end
 
-	-- component factories (tab, ...)
 	Exodus.CreateRadioGroup = createRadioGroup
 	Exodus.CreateCircularProgress = createCircularProgress
 	Exodus.CreateTagsInput = createTagsInput
@@ -8440,7 +8331,6 @@ applyV6PublicAPI = function(Exodus)
 	W.RandomTheme = randomTheme
 	W.DailyAccent = dailyAccent
 
-	-- extend bindTabAPI-style methods on future tabs via enhance wrap
 	pcall(function()
 		local _bind = bindTabAPI
 		if type(_bind) == "function" then
@@ -8500,22 +8390,20 @@ applyV6PublicAPI = function(Exodus)
 	return Exodus
 end
 
--- Auto-apply if Exodus table already exists in this scope (after public library block)
 pcall(function()
 	if type(Exodus) == "table" then
 		applyV6PublicAPI(Exodus)
 	end
 end)
 
-
 end)()
 
--- ============ KEY SYSTEM (Premium ScriptHub Gate) ============
+-- ============ KEY SYSTEM ============
 local function runKeySystem(opts)
 	opts = type(opts) == "table" and opts or {}
 	local title = opts.Title or "EXODUS"
 	local subtitle = opts.Subtitle or opts.SubTitle or "ScriptHub Access"
-	local note = opts.Note or opts.Description -- filled after keys are parsed
+	local note = opts.Note or opts.Description
 	local saveKey = opts.SaveKey ~= false
 	local fileName = opts.FileName or opts.KeyFile or "exodus_key.txt"
 	local keyLink = opts.KeyLink or opts.Discord or opts.Link
@@ -8574,7 +8462,6 @@ local function runKeySystem(opts)
 		if premium then premiumValid[n] = true end
 	end
 	if opts.Key then addKey(opts.Key, false) end
-	-- StandardKeys (preferred) + Keys (backward compatible alias)
 	if type(opts.StandardKeys) == "table" then
 		for _, k in ipairs(opts.StandardKeys) do addKey(k, false) end
 	end
@@ -8596,7 +8483,6 @@ local function runKeySystem(opts)
 		end)
 	end
 	if type(opts.OnlineKey) == "string" then
-		-- Timed fetch so a hung CDN cannot freeze Boot/KeySystem on KRNL
 		local done, body = false, nil
 		task.spawn(function()
 			body = httpGet(opts.OnlineKey)
@@ -8629,7 +8515,6 @@ local function runKeySystem(opts)
 			break
 		end
 	end
-	-- Default note when caller left it blank
 	if (note == nil or note == "") then
 		if hasPremiumKeys and hasStandardKeys then
 			note = "Accepts Standard and Premium license keys."
@@ -8644,7 +8529,6 @@ local function runKeySystem(opts)
 		local n = normalizeKey(raw)
 		if n == "" then return nil end
 		if premiumValid[n] then return "premium" end
-		-- Heuristic: PREMIUM- / VIP- / PRO- prefixes count as premium if key is valid
 		if valid[n] and (string.find(n, "^PREMIUM") or string.find(n, "^VIP") or string.find(n, "^PRO%-") or string.find(n, "PREMIUM")) then
 			return "premium"
 		end
@@ -8745,7 +8629,6 @@ local function runKeySystem(opts)
 		return "UNKNOWN"
 	end
 
-	-- Already unlocked via saved key
 	local saved, savedTier = loadSaved()
 	if saved and isValid(saved) then
 		local tier = getTier(saved) or savedTier or "standard"
@@ -8773,7 +8656,7 @@ local function runKeySystem(opts)
 	local unlocked = false
 	local attempts = 0
 	local remember = rememberDefault
-	local CARD_W, CARD_H = 420, 392
+	local CARD_W, CARD_H = 420, 400
 
 	local dim = make("TextButton", {
 		Name = "KeyDim",
@@ -8870,7 +8753,6 @@ local function runKeySystem(opts)
 		})
 	end)
 
-	-- Brand row
 	local brandMark = make("Frame", {
 		Size = UDim2.fromOffset(36, 36),
 		Position = UDim2.fromOffset(22, 18),
@@ -8971,7 +8853,6 @@ local function runKeySystem(opts)
 	})
 	noteLbl.Parent = card
 
-	-- Compact tier hint chips (only when both tiers exist)
 	local tierHintY = 124
 	if hasPremiumKeys and hasStandardKeys then
 		local hintRow = make("Frame", {
@@ -9011,7 +8892,6 @@ local function runKeySystem(opts)
 		tierHintY = 148
 	end
 
-	-- Session strip
 	local session = make("Frame", {
 		Size = UDim2.new(1, -44, 0, 26),
 		Position = UDim2.fromOffset(22, tierHintY),
@@ -9052,7 +8932,6 @@ local function runKeySystem(opts)
 	box.Parent = card
 	local inputStroke = box:FindFirstChildOfClass("UIStroke")
 	if saved and #tostring(saved) > 0 and not isValid(saved) then
-		-- show nothing for bad saved keys
 	elseif saved and isValid(saved) then
 		box.Text = tostring(saved)
 	end
@@ -9084,7 +8963,6 @@ local function runKeySystem(opts)
 	})
 	statusLbl.Parent = card
 
-	-- Remember toggle
 	local rememberBtn = make("TextButton", {
 		Size = UDim2.fromOffset(18, 18),
 		Position = UDim2.new(1, -40, 0, statusY - 1),
@@ -9154,9 +9032,6 @@ local function runKeySystem(opts)
 	}, { corner(9), stroke(Theme.Stroke, 1, 0.4) })
 	getKeyBtn.Parent = actionRow
 
-	-- Keep discordBtn alias for existing handlers (same control)
-	local discordBtn = getKeyBtn
-
 	local footerY = actionY + (keyLink and 44 or 8)
 	make("TextLabel", {
 		BackgroundTransparency = 1,
@@ -9170,7 +9045,6 @@ local function runKeySystem(opts)
 		ZIndex = 212,
 	}).Parent = card
 
-	-- Fit card height to content
 	CARD_H = math.max(340, footerY + 28)
 	host.Size = UDim2.fromOffset(CARD_W - 24, CARD_H - 18)
 
@@ -9388,7 +9262,6 @@ local function runKeySystem(opts)
 	end)
 
 	while not finished and screenGui and screenGui.Parent do
-		-- Heartbeat yield (more reliable than bare task.wait on some executors)
 		pcall(function()
 			RunService.Heartbeat:Wait()
 		end)
@@ -9556,7 +9429,6 @@ Exodus.Window = {
 	GetTabs = function()
 		return tabs
 	end,
-	-- Fluent-style: Window:AddTab(...) — this was missing and broke hub scripts
 	AddTab = function(_, config)
 		return createTab(config)
 	end,
@@ -9583,7 +9455,6 @@ function Exodus:KeySystem(opts)
 		return false
 	end
 	State.keyGateActive = false
-	-- Truthy tier string ("standard"|"premium") or false
 	if result then
 		local tier = (type(result) == "string" and result) or State.licenseTier or "standard"
 		Exodus.KeyTier = tier
@@ -9599,15 +9470,10 @@ function Exodus:KeySystem(opts)
 	return false
 end
 
---[[
-	Boot sequence: KeySystem (optional) → Loader (optional) → main GUI
-	Use with getgenv().EXODUS_DEFER_BOOT = true so auto-boot does not race.
-]]
 function Exodus:Boot(opts)
 	opts = type(opts) == "table" and opts or {}
 	State.keyGateActive = false
 
-	-- Keep main shell hidden during the sequence
 	pcall(function()
 		root.Visible = false
 		window.Visible = false
@@ -9621,7 +9487,6 @@ function Exodus:Boot(opts)
 		keyOpts = opts.KeySettings
 	end
 	if keyOpts then
-		-- Don't open GUI yet — loader runs next
 		keyOpts.SkipShow = true
 		keyOpts.ThenLoader = true
 		local unlocked = Exodus:KeySystem(keyOpts)
@@ -9629,7 +9494,6 @@ function Exodus:Boot(opts)
 			pcall(destroyGui)
 			return false
 		end
-		-- Sync tier onto library + window after unlock
 		local tier = (type(unlocked) == "string" and unlocked) or State.licenseTier or "standard"
 		Exodus.KeyTier = tier
 		Exodus.LicenseTier = tier
@@ -9639,7 +9503,6 @@ function Exodus:Boot(opts)
 			Exodus.Window.LicenseTier = tier
 			Exodus.Window.Premium = (tier == "premium")
 		end
-		-- brief beat so key card can fade out
 		task.wait(0.2)
 	end
 
@@ -9654,14 +9517,12 @@ function Exodus:Boot(opts)
 
 	if wantLoader and playLoader then
 		pcall(function()
-			-- ensure leftover key UI is gone
 			for _, ch in ipairs(screenGui:GetChildren()) do
 				if ch.Name == "KeySystemHost" or ch.Name == "KeyDim" then
 					ch:Destroy()
 				end
 			end
 		end)
-		-- Keep main window hidden while loader runs
 		pcall(function()
 			root.Visible = false
 			window.Visible = false
@@ -9724,7 +9585,6 @@ function Exodus:CreateWindow(config)
 	if config.SizePreset then
 		pcall(function() setSizePreset(config.SizePreset) end)
 	end
-	-- Ensure Window always exposes tab API (Fluent-style Window:AddTab)
 	local W = Exodus.Window
 	if type(W) == "table" then
 		if type(W.AddTab) ~= "function" then
@@ -9740,7 +9600,6 @@ function Exodus:CreateWindow(config)
 		W.LicenseTier = W.KeyTier
 		W.Premium = Exodus.Premium == true or W.KeyTier == "premium"
 	end
-	-- Make sure shell is visible after CreateWindow (Boot/defer may have left it hidden)
 	if not State.keyGateActive then
 		pcall(function()
 			uiVisible = true
@@ -9750,12 +9609,10 @@ function Exodus:CreateWindow(config)
 	return Exodus.Window
 end
 
--- Apply extended API surface (window helpers, notifs, theme, components on tabs)
 pcall(function()
 	applyV6PublicAPI(Exodus)
 end)
 
--- Aliases for Fluent-style loaders
 local Fluent = Exodus
 Exodus.Fluent = Exodus
 
@@ -9764,8 +9621,6 @@ pcall(function()
 	getgenv().Fluent = Exodus
 end)
 
-
--- Unfocused opacity watcher
 task.spawn(function()
 	while screenGui and screenGui.Parent do
 		task.wait(0.35)
@@ -9784,7 +9639,6 @@ task.spawn(function()
 	end
 end)
 
--- Daily accent + open sound
 pcall(function()
 	if dailyAccent then dailyAccent() end
 	playUiSound("open")
@@ -9800,11 +9654,9 @@ end
 local showDemo = envFlag("EXODUS_DEMO")
 local skipLoader = envFlag("EXODUS_NO_LOADER")
 local deferBoot = envFlag("EXODUS_DEFER_BOOT") or envFlag("EXODUS_MANUAL_BOOT")
--- Legacy: FLUENT_NO_DEMO forced library mode (now default). Ignore unless demo requested.
 
 local function bootLibrary(firstTab)
 	task.defer(function()
-		-- Consumer will call Exodus:Boot({ KeySystem=..., Loader=true }) → key → loader → GUI
 		if deferBoot then
 			pcall(function()
 				root.Visible = false
@@ -9819,7 +9671,6 @@ local function bootLibrary(firstTab)
 			return
 		end
 
-		-- Always clear loader host/rim (fixes ghost glass frame when NO_LOADER)
 		if skipLoader or not playLoader then
 			pcall(function()
 				if loaderHost and loaderHost.Parent then loaderHost:Destroy() end
@@ -9836,7 +9687,6 @@ local function bootLibrary(firstTab)
 			end)
 		end
 		showWindow()
-		-- hard-reset if a bad size somehow stuck
 		pcall(function()
 			if root.Size.Y.Offset < 280 or root.Size.X.Offset < 420 then
 				WIN_W, WIN_H = 610, 430
@@ -9854,12 +9704,11 @@ local function bootLibrary(firstTab)
 end
 
 if not showDemo then
-	-- Library mode: empty shell — consumer scripts call AddTab / CreateWindow
 	bootLibrary(nil)
 	return Exodus
 end
 
--- ============ DEMO UI (opt-in: getgenv().EXODUS_DEMO = true) ============
+-- ============ DEMO UI ============
 (function()
 local homeTab = Exodus:AddTab({ Title = "Home", Icon = "home", Description = "Overview", Color = Color3.fromRGB(198, 198, 208) })
 local playerTab = Exodus:AddTab({ Title = "Player", Icon = "user", Description = "Movement", Color = Color3.fromRGB(170, 170, 180) })
