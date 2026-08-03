@@ -36,9 +36,30 @@ local TextService = game:GetService("TextService")
 
 local player = Players.LocalPlayer
 if not player then
-	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-	player = Players.LocalPlayer
+	local deadline = os.clock() + 10
+	while not player and os.clock() < deadline do
+		player = Players.LocalPlayer
+		if player then break end
+		task.wait(0.05)
+	end
+	if not player then
+		Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+		player = Players.LocalPlayer
+	end
 end
+
+-- Soft re-entry: unload previous library instance so double-exec does not race GUIs.
+pcall(function()
+	local prev = getgenv().MilkyHubInstance or getgenv().Milky or getgenv().Zenless
+	if type(prev) == "table" and type(prev.Unload) == "function" and prev ~= nil then
+		-- Only unload a prior live instance (not this chunk — Milky not built yet)
+		if getgenv().MilkyHubLoaded == true then
+			pcall(function() prev:Unload() end)
+			task.wait(0.15)
+		end
+	end
+end)
+getgenv().MilkyHubLoaded = false
 
 --
 -- Structure:
@@ -1227,9 +1248,13 @@ do
 		screenGui.Parent = hiddenUi
 	end)
 	if not ok or not screenGui.Parent then
-		local pg = player:WaitForChild("PlayerGui")
-		killOld(pg)
-		screenGui.Parent = pg
+		local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
+		if pg then
+			killOld(pg)
+			screenGui.Parent = pg
+		else
+			warn("[Milky Hub] PlayerGui missing after timeout — UI may not parent.")
+		end
 	end
 end
 
@@ -8658,7 +8683,7 @@ local function runKeySystem(opts)
 		end
 	end
 
-	local function fetchOnlineKeyLists()
+	local function fetchOnlineKeyLists(timeoutSec)
 		local urls = {}
 		if type(opts.OnlineKeys) == "table" then
 			for _, u in ipairs(opts.OnlineKeys) do table.insert(urls, u) end
@@ -8672,13 +8697,29 @@ local function runKeySystem(opts)
 		if #urls == 0 then
 			for _, u in ipairs(DEFAULT_LISTS) do table.insert(urls, u) end
 		end
+		if #urls == 0 then return end
+		-- Parallel fetch with a hard ceiling so Boot/KeySystem never stalls on dead hosts.
+		local perUrl = math.min(tonumber(timeoutSec) or 4, 5)
+		local remaining = #urls
 		for _, url in ipairs(urls) do
-			ingestKeyList(timedHttpGet(url, 6))
+			task.spawn(function()
+				ingestKeyList(timedHttpGet(url, perUrl))
+				remaining = remaining - 1
+			end)
+		end
+		local t0 = os.clock()
+		local ceiling = perUrl + 1
+		while remaining > 0 and (os.clock() - t0) < ceiling do
+			task.wait(0.05)
 		end
 	end
 
-	-- Prefetch key lists (get keys from server) after optional warm verify base is known
-	fetchOnlineKeyLists()
+	-- Prefetch in background; do not block key card / owner unlock on network.
+	task.spawn(function()
+		pcall(fetchOnlineKeyLists, 4)
+	end)
+	-- Brief beat so first responses can land before saved-key / owner check
+	task.wait(0.15)
 
 	local hasPremiumKeys = next(premiumValid) ~= nil
 	local hasStandardKeys = false
@@ -8720,7 +8761,7 @@ local function runKeySystem(opts)
 		else
 			url = url .. ((string.find(url, "?", 1, true) and "&") or "?") .. "key=" .. key
 		end
-		local body = timedHttpGet(url, 6)
+		local body = timedHttpGet(url, 4)
 		if responseSaysValid(body) then
 			local low = string.lower(tostring(body))
 			if string.find(low, "premium", 1, true) then return "premium" end
@@ -9588,6 +9629,9 @@ function Milky:Unload()
 	pcall(function()
 		if getgenv().Milky == Milky or getgenv().Zenless == Milky then getgenv().Milky = nil; getgenv().Zenless = nil end
 		if getgenv().Fluent == Milky then getgenv().Fluent = nil end
+		if getgenv().MilkyHubInstance == Milky then getgenv().MilkyHubInstance = nil end
+		getgenv().MilkyHubLoaded = false
+		getgenv().MilkyHubScriptBooting = false
 	end)
 end
 
@@ -9914,6 +9958,8 @@ pcall(function()
 	getgenv().Milky = Milky
 	getgenv().Zenless = Milky
 	getgenv().Fluent = Milky
+	getgenv().MilkyHubInstance = Milky
+	getgenv().MilkyHubLoaded = true
 end)
 
 
