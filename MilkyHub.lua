@@ -1,4 +1,4 @@
--- Milky Hub 0.0.6 — pink glass GUI lib
+-- Milky Hub 0.0.7 — pink glass GUI lib
 --[[
   getgenv().MILKY_DEFER_BOOT = true
   local Milky = loadstring(readfile("MilkyHub.lua"))()
@@ -61,7 +61,7 @@ getgenv().MilkyHubLoaded = false
 -- Regions (keep V6 API locals inside IIFE — Luau 200-register limit):
 --   config/theme · util · anim · primitives · icons
 --   window/shell · controls · keysystem · api / return
-local LIBRARY_VERSION = "0.0.6"
+local LIBRARY_VERSION = "0.0.7"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
@@ -4565,6 +4565,9 @@ local function createDropdown(tab, text, options, default, callback, opts)
 	make("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }).Parent = optionsFrame
 
 	local optButtons = {}
+	-- Forward-declare: rebuild's click handler closes the menu via setOpen.
+	-- Without this, Luau resolves setOpen as a nil global → "attempt to call a nil value" (line ~4616).
+	local setOpen
 
 	local function persist()
 		if not flag then return end
@@ -4613,7 +4616,9 @@ local function createDropdown(tab, text, options, default, callback, opts)
 						selected = opt
 						selectedLabel.Text = displayText()
 						rebuild()
-						setOpen(false)
+						if type(setOpen) == "function" then
+							setOpen(false)
+						end
 						persist()
 						safeCall(callback, opt)
 					end
@@ -4622,7 +4627,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 		end
 	end
 
-	local function setOpen(v)
+	setOpen = function(v)
 		open = v
 		searchBox.Visible = open and useSearch
 		local listH = math.min(8, math.max(1, #options)) * optH
@@ -10514,7 +10519,7 @@ homeTab:AddParagraph("Milky Hub",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v0.0.6", "MILKY", "ScriptHub", "Pink" })
+homeTab:AddBadgeRow({ "v0.0.7", "MILKY", "ScriptHub", "Pink" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
