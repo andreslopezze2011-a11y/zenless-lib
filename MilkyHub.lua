@@ -1,4 +1,4 @@
--- Milky Hub 0.0.7 — pink glass GUI lib
+-- Milky Hub 0.0.8 - pink glass GUI lib
 --[[
   getgenv().MILKY_DEFER_BOOT = true
   local Milky = loadstring(readfile("MilkyHub.lua"))()
@@ -48,7 +48,7 @@ end
 pcall(function()
 	local prev = getgenv().MilkyHubInstance or getgenv().Milky or getgenv().Zenless
 	if type(prev) == "table" and type(prev.Unload) == "function" and prev ~= nil then
-		-- Only unload a prior live instance (not this chunk — Milky not built yet)
+		-- Only unload a prior live instance (not this chunk â€” Milky not built yet)
 		if getgenv().MilkyHubLoaded == true then
 			pcall(function() prev:Unload() end)
 			task.wait(0.15)
@@ -58,10 +58,10 @@ end)
 getgenv().MilkyHubLoaded = false
 
 --
--- Regions (keep V6 API locals inside IIFE — Luau 200-register limit):
---   config/theme · util · anim · primitives · icons
---   window/shell · controls · keysystem · api / return
-local LIBRARY_VERSION = "0.0.7"
+-- Regions (keep V6 API locals inside IIFE â€” Luau 200-register limit):
+--   config/theme Â· util Â· anim Â· primitives Â· icons
+--   window/shell Â· controls Â· keysystem Â· api / return
+local LIBRARY_VERSION = "0.0.8"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
@@ -441,7 +441,7 @@ local function stroke(color, thickness, transparency)
 end
 
 --
--- icons (vector glyphs — no unicode)
+-- icons (vector glyphs â€” no unicode)
 -- Usage: local icon = drawIcon(parent, "target", Theme.Accent, 16)
 local IconAliases = {
 	["c"] = "target", combat = "target", aimbot = "target", crosshair = "target",
@@ -1252,7 +1252,7 @@ do
 			killOld(pg)
 			screenGui.Parent = pg
 		else
-			warn("[Milky Hub] PlayerGui missing after timeout — UI may not parent.")
+			warn("[Milky Hub] PlayerGui missing after timeout â€” UI may not parent.")
 		end
 	end
 end
@@ -1313,7 +1313,7 @@ scaleHost.Parent = root
 local windowScale = make("UIScale", { Scale = 0.92 })
 windowScale.Parent = scaleHost
 
--- glass rim — thin, not neon
+-- glass rim â€” thin, not neon
 local windowStroke = stroke(Color3.fromRGB(236, 188, 208), 1, 0.68)
 local windowAccentStroke = stroke(Theme.Accent, 1, 0.55)
 registerAccent(windowAccentStroke, "Color")
@@ -1952,8 +1952,8 @@ end
 
 end)()
 
--- window/shell — title bar
--- Row 1: avatar · MILKY HUB · version · chrome   |  Row 2: game subtitle only
+-- window/shell â€” title bar
+-- Row 1: avatar Â· MILKY HUB Â· version Â· chrome   |  Row 2: game subtitle only
 local titleBar = make("Frame", {
 	Name = "TitleBar",
 	Size = UDim2.new(1, 0, 0, MINI_H),
@@ -2001,10 +2001,10 @@ local dotGlow = make("Frame", {
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
--- Header hierarchy (exclusive slots — never stack):
+-- Header hierarchy (exclusive slots â€” never stack):
 --   Row 1: [avatar] MILKY HUB  [vX.Y.Z chip] ........ [fps][bell][controls]
---   Row 2: game subtitle only (e.g. "Volleyball Legends") — never shares with version/theme
--- Theme / size-preset names ("Default", "Normal", …) are NOT drawn in the header.
+--   Row 2: game subtitle only (e.g. "Volleyball Legends") â€” never shares with version/theme
+-- Theme / size-preset names ("Default", "Normal", â€¦) are NOT drawn in the header.
 -- TitleL is one table to stay under Luau's 200 local-register limit.
 local TitleL = { left = 44, reserve = 210, gap = 8, brandH = 26, subH = 16, padY = 8 }
 titleBar.ClipsDescendants = true
@@ -2041,7 +2041,7 @@ local hubLabel = make("TextLabel", {
 hubLabel.Parent = titleBar
 registerAccent(hubLabel, "TextColor3")
 
--- subtitle sits under brand — never beside version
+-- subtitle sits under brand â€” never beside version
 local gameTitleLabel = make("TextLabel", {
 	Name = "GameTitle",
 	BackgroundTransparency = 1,
@@ -2111,7 +2111,7 @@ local function ellipsizeToWidth(text, font, textSize, maxW)
 	if ok and bounds and bounds.X <= maxW then
 		return text
 	end
-	local ell = "…"
+	local ell = "â€¦"
 	local lo, hi = 0, #text
 	local best = ell
 	while lo <= hi do
@@ -2176,7 +2176,7 @@ local function layoutTitleVersion()
 	local left = TitleL.left
 	local vChip = State.versionChip
 
-	-- Brand (MILKY [HUB]) — exclusive left slot on row 1
+	-- Brand (MILKY [HUB]) â€” exclusive left slot on row 1
 	local naturalTitle = measureLabelWidth(titleLabel, 9)
 	local brandBudget = barW - left - reserve - TitleL.gap - verW - (hubVisible and (logoGap + hubW) or 0) - 8
 	local titleW = math.max(28, math.min(naturalTitle, math.max(36, brandBudget)))
@@ -2192,7 +2192,7 @@ local function layoutTitleVersion()
 		cursor = cursor + hubW + 2
 	end
 
-	-- Version chip — exclusive after brand; never on subtitle row; never past chrome
+	-- Version chip â€” exclusive after brand; never on subtitle row; never past chrome
 	local verX = cursor + TitleL.gap
 	local maxVerX = barW - reserve - verW - 4
 	if verX > maxVerX then
@@ -2205,7 +2205,7 @@ local function layoutTitleVersion()
 		vChip.Visible = true
 	end
 
-	-- Premium badge (if any) sits AFTER version chip — never over title text
+	-- Premium badge (if any) sits AFTER version chip â€” never over title text
 	pcall(function()
 		local badge = State.premiumBadge
 		if badge and badge.Parent and badge.Visible then
@@ -2215,7 +2215,7 @@ local function layoutTitleVersion()
 		end
 	end)
 
-	-- Subtitle — exclusive row 2; never shares Y with brand/version/theme/chrome
+	-- Subtitle â€” exclusive row 2; never shares Y with brand/version/theme/chrome
 	if hasSub then
 		local subY = padY + brandH + 1
 		local subMax = math.max(40, barW - left - reserve - 8)
@@ -3916,7 +3916,7 @@ local function createParagraph(tab, title, body)
 		TextXAlignment = Enum.TextXAlignment.Left,
 	}).Parent = holder
 
-	make("TextLabel", {
+	local bodyLabel = make("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 0),
 		Position = UDim2.fromOffset(0, 22),
@@ -3927,9 +3927,18 @@ local function createParagraph(tab, title, body)
 		TextColor3 = Theme.SubText,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
-	}).Parent = holder
+	})
+	bodyLabel.Parent = holder
 
-	return holder
+	return {
+		Frame = holder,
+		Set = function(v)
+			bodyLabel.Text = tostring(v or "")
+		end,
+		Get = function()
+			return bodyLabel.Text
+		end,
+	}
 end
 
 local function createButton(tab, text, callback, primary, opts)
@@ -4246,7 +4255,7 @@ local function createToggle(tab, text, default, callback, opts)
 		else
 			api.Set(not state)
 		end
-		-- quiet click — no spark burst
+		-- quiet click â€” no spark burst
 	end)
 	pcall(function()
 		holder.Activated:Connect(function() end)
@@ -4566,7 +4575,7 @@ local function createDropdown(tab, text, options, default, callback, opts)
 
 	local optButtons = {}
 	-- Forward-declare: rebuild's click handler closes the menu via setOpen.
-	-- Without this, Luau resolves setOpen as a nil global → "attempt to call a nil value" (line ~4616).
+	-- Without this, Luau resolves setOpen as a nil global â†’ "attempt to call a nil value" (line ~4616).
 	local setOpen
 
 	local function persist()
@@ -4671,6 +4680,42 @@ local function createDropdown(tab, text, options, default, callback, opts)
 			end
 			selectedLabel.Text = displayText()
 			persist()
+		end,
+		-- Live-refresh options (Rescan Styles / Abilities)
+		SetValues = function(newOptions, keepSelection)
+			options = type(newOptions) == "table" and newOptions or {}
+			useSearch = #options > 8
+			if multi then
+				local nextSel = {}
+				if keepSelection ~= false then
+					for _, o in ipairs(options) do
+						if selected[o] then
+							nextSel[o] = true
+						end
+					end
+				end
+				selected = nextSel
+			else
+				local keep = keepSelection ~= false and selected
+				local found = false
+				if keep ~= nil then
+					for _, o in ipairs(options) do
+						if o == keep then
+							found = true
+							break
+						end
+					end
+				end
+				selected = found and keep or options[1]
+			end
+			selectedLabel.Text = displayText()
+			optionsFrame.Size = UDim2.new(1, -16, 0, math.min(8, math.max(1, #options)) * optH)
+			optionsFrame.CanvasSize = UDim2.new(0, 0, 0, #options * optH)
+			if open then
+				rebuild()
+			end
+			persist()
+			return selected
 		end,
 		Flag = flag,
 	}
@@ -6695,7 +6740,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
--- V6 mega chunk — API locals stay inside this IIFE (200-register fix)
+-- V6 mega chunk â€” API locals stay inside this IIFE (200-register fix)
 ;(function()
 local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
@@ -10097,11 +10142,11 @@ Milky.Window = {
 			-- keep existing subtitle if any
 		else
 			-- Keep brand (MILKY + pink HUB); put remainder as subtitle on its own row
-			local gamePart = string.match(t, "^[Mm]ilky%s*[Hh]ub%s*[|%-%—:]%s*(.+)$")
-				or string.match(t, "^MILKY%s*HUB%s*[|%-%—:]%s*(.+)$")
+			local gamePart = string.match(t, "^[Mm]ilky%s*[Hh]ub%s*[|%-%â€”:]%s*(.+)$")
+				or string.match(t, "^MILKY%s*HUB%s*[|%-%â€”:]%s*(.+)$")
 			if not gamePart and upper:find("MILKY", 1, true) then
 				gamePart = string.gsub(t, "^%s*[Mm][Ii][Ll][Kk][Yy]%s*[Hh][Uu][Bb]%s*", "")
-				gamePart = string.gsub(gamePart, "^[%|%-%—:%s]+", "")
+				gamePart = string.gsub(gamePart, "^[%|%-%â€”:%s]+", "")
 			end
 			titleLabel.Text = "MILKY"
 			if hubLabel then
@@ -10114,7 +10159,7 @@ Milky.Window = {
 					gameTitleLabel.Text = gamePart
 					gameTitleLabel.Visible = true
 				else
-					-- Fully custom title without brand prefix — still brand-first if short
+					-- Fully custom title without brand prefix â€” still brand-first if short
 					titleLabel.Text = t
 					if hubLabel then hubLabel.Visible = false end
 					gameTitleLabel.Visible = false
@@ -10378,7 +10423,7 @@ pcall(function()
 	if apply then apply(Milky) end
 end)
 
--- Aliases for Fluent-style / Zenless loaders (no extra chunk locals — register limit)
+-- Aliases for Fluent-style / Zenless loaders (no extra chunk locals â€” register limit)
 Milky.Fluent = Milky
 Milky.Create = function(self, config)
 	return Milky.CreateWindow(self, config)
@@ -10519,7 +10564,7 @@ homeTab:AddParagraph("Milky Hub",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v0.0.7", "MILKY", "ScriptHub", "Pink" })
+homeTab:AddBadgeRow({ "v0.0.8", "MILKY", "ScriptHub", "Pink" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
