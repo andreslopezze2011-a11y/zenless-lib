@@ -131,6 +131,7 @@ local Flags = {
 	HighContrast = false,
 	Monochrome = false,
 	LargeHitboxes = false,
+	ShowMobileHideButton = false, -- never auto-show floating MH; opt-in only
 	ClickThrough = false,
 	AlwaysOnTop = false,
 	SilentNotifications = false,
@@ -206,6 +207,9 @@ local State = {
 	premium = false,
 	licenseTier = "none", -- none | standard | premium
 	premiumBadge = nil,
+	versionChip = nil,
+	rightChrome = nil,
+	notifBell = nil,
 	-- V6 API exports (avoids main-chunk forward locals / 200-register limit)
 	V6 = {},
 }
@@ -2132,9 +2136,14 @@ end
 
 local function layoutTitleVersion()
 	local fullGame = tostring(gameTitleLabel:GetAttribute("FullText") or "")
-	local hasSub = fullGame ~= ""
-	local padY, brandH, subH = TitleL.padY, TitleL.brandH, TitleL.subH
-	local barH = hasSub and (padY + brandH + subH + 6) or 52
+	local hasSub = fullGame ~= "" and not minimized
+	local padY, brandH = TitleL.padY, TitleL.brandH
+	-- Mini pill: single compact row (no subtitle)
+	if minimized then
+		padY = 6
+		brandH = 22
+	end
+	local barH = hasSub and (padY + brandH + TitleL.subH + 6) or (padY * 2 + brandH)
 	MINI_H = barH
 	titleBar.Size = UDim2.new(1, 0, 0, barH)
 	pcall(function()
@@ -2146,6 +2155,7 @@ local function layoutTitleVersion()
 		local td = window:FindFirstChild("TitleDiv")
 		if td then
 			td.Position = UDim2.fromOffset(12, barH - 1)
+			td.Visible = not minimized
 		end
 	end)
 	local brandMid = padY + brandH * 0.5
@@ -2159,13 +2169,24 @@ local function layoutTitleVersion()
 	end
 	if barW < 1 then return end
 
-	local reserve = TitleL.reserve
-	if IS_MOBILE or (minimized and barW < 420) then
-		reserve = math.min(reserve, math.max(118, barW * 0.42))
+	local chrome = State.rightChrome
+	local chromeW = 0
+	pcall(function()
+		if chrome and chrome.Parent then
+			local lay = chrome:FindFirstChildOfClass("UIListLayout")
+			if lay then
+				chromeW = lay.AbsoluteContentSize.X
+			end
+			if chromeW < 1 then
+				chromeW = chrome.AbsoluteSize.X
+			end
+		end
+	end)
+	if chromeW < 40 then
+		chromeW = minimized and 110 or 180
 	end
-	if minimized then
-		reserve = math.min(reserve, 130)
-	end
+	local reserve = math.floor(chromeW + 18)
+	TitleL.reserve = reserve
 
 	local hubVisible = hubLabel.Visible
 	local hubW = hubVisible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
@@ -2175,10 +2196,61 @@ local function layoutTitleVersion()
 	local brandY = padY
 	local left = TitleL.left
 	local vChip = State.versionChip
+	local badge = State.premiumBadge
+	local showPrem = badge and badge.Parent and State.premium == true
+	local premW = (showPrem and not minimized) and 58 or 0
+	local verInChrome = minimized
 
-	-- Brand (MILKY [HUB]) â€” exclusive left slot on row 1
+	pcall(function()
+		local fps = (chrome and chrome:FindFirstChild("FpsPill")) or titleBar:FindFirstChild("FpsPill", true)
+		if fps then
+			fps.Visible = not minimized and not (IS_MOBILE and barW < 460)
+			fps.LayoutOrder = 10
+		end
+		if vChip then
+			vChip.LayoutOrder = 1
+			vChip.Visible = true
+			if verInChrome and chrome then
+				vChip.Parent = chrome
+				vChip.Size = UDim2.fromOffset(verW, 18)
+				vChip.AnchorPoint = Vector2.new(0, 0)
+				vChip.Position = UDim2.fromOffset(0, 0)
+			else
+				vChip.Parent = titleBar
+			end
+		end
+		if badge and badge.Parent then
+			badge.LayoutOrder = 2
+			if verInChrome and chrome and showPrem then
+				badge.Visible = true
+				badge.Parent = chrome
+				badge.Size = UDim2.fromOffset(52, 16)
+				badge.AnchorPoint = Vector2.new(0, 0)
+				badge.Position = UDim2.fromOffset(0, 0)
+			elseif showPrem and not verInChrome then
+				badge.Visible = true
+				badge.Parent = titleBar
+			else
+				badge.Visible = showPrem and not minimized
+				if not verInChrome then
+					badge.Parent = titleBar
+				end
+			end
+		end
+		if chrome then
+			local lay = chrome:FindFirstChildOfClass("UIListLayout")
+			if lay then
+				chromeW = math.max(lay.AbsoluteContentSize.X, chromeW)
+			end
+			chrome.Size = UDim2.fromOffset(math.max(chromeW, 1), 28)
+			chrome.Position = UDim2.new(1, -10, 0.5, 0)
+			reserve = math.floor(math.max(chromeW, 1) + 18)
+			TitleL.reserve = reserve
+		end
+	end)
+
 	local naturalTitle = measureLabelWidth(titleLabel, 9)
-	local brandBudget = barW - left - reserve - TitleL.gap - verW - (hubVisible and (logoGap + hubW) or 0) - 8
+	local brandBudget = barW - left - reserve - TitleL.gap - (verInChrome and 0 or (verW + premW + TitleL.gap)) - (hubVisible and (logoGap + hubW) or 0) - 8
 	local titleW = math.max(28, math.min(naturalTitle, math.max(36, brandBudget)))
 	titleLabel.Size = UDim2.fromOffset(titleW, brandH)
 	titleLabel.Position = UDim2.fromOffset(left, brandY)
@@ -2192,41 +2264,35 @@ local function layoutTitleVersion()
 		cursor = cursor + hubW + 2
 	end
 
-	-- Version chip â€” exclusive after brand; never on subtitle row; never past chrome
-	local verX = cursor + TitleL.gap
-	local maxVerX = barW - reserve - verW - 4
-	if verX > maxVerX then
-		verX = math.max(left + titleW + 4, maxVerX)
-	end
-	if vChip then
+	if vChip and not verInChrome then
+		local verX = cursor + TitleL.gap
+		local maxVerX = barW - reserve - verW - premW - 4
+		if verX > maxVerX then
+			verX = math.max(left + titleW + 4, maxVerX)
+		end
 		vChip.Size = UDim2.fromOffset(verW, 18)
 		vChip.Position = UDim2.fromOffset(verX, brandY + math.floor((brandH - 18) * 0.5))
 		vChip.ZIndex = 5
 		vChip.Visible = true
-	end
-
-	-- Premium badge (if any) sits AFTER version chip â€” never over title text
-	pcall(function()
-		local badge = State.premiumBadge
-		if badge and badge.Parent and badge.Visible then
-			badge.Position = UDim2.fromOffset(verX + verW + 6, brandY + math.floor((brandH - 16) * 0.5))
+		cursor = verX + verW
+		if badge and badge.Parent == titleBar and badge.Visible then
+			badge.Position = UDim2.fromOffset(cursor + 6, brandY + math.floor((brandH - 16) * 0.5))
 			badge.AnchorPoint = Vector2.new(0, 0)
 			badge.ZIndex = 5
 		end
-	end)
+	end
 
-	-- Subtitle â€” exclusive row 2; never shares Y with brand/version/theme/chrome
 	if hasSub then
 		local subY = padY + brandH + 1
 		local subMax = math.max(40, barW - left - reserve - 8)
 		gameTitleLabel.Text = ellipsizeToWidth(fullGame, gameTitleLabel.Font, gameTitleLabel.TextSize, subMax)
-		gameTitleLabel.Size = UDim2.fromOffset(subMax, subH)
+		gameTitleLabel.Size = UDim2.fromOffset(subMax, TitleL.subH)
 		gameTitleLabel.Position = UDim2.fromOffset(left, subY)
 		gameTitleLabel.Visible = true
 		gameTitleLabel.ZIndex = 5
 	else
 		gameTitleLabel.Text = ""
-		gameTitleLabel.Size = UDim2.fromOffset(0, subH)
+		gameTitleLabel.Size = UDim2.fromOffset(0, TitleL.subH)
 		gameTitleLabel.Visible = false
 	end
 end
@@ -2235,18 +2301,32 @@ titleLabel:GetPropertyChangedSignal("Text"):Connect(layoutTitleVersion)
 titleBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutTitleVersion)
 task.defer(layoutTitleVersion)
 
--- Right chrome spacing (from right edge): controls -> gap -> bell -> gap -> fps
--- winControls width 70 @ -12 -> occupies [W-82, W-12]
--- bell 26 @ -96 -> [W-122, W-96]
--- fps 72 @ -136 -> [W-208, W-136]
-local fpsPill = make("Frame", {
-	Size = UDim2.fromOffset(72, 22),
-	Position = UDim2.new(1, -136, 0.5, 0),
+-- Right chrome: UIListLayout so version/FPS/info/+/x never overlap (no new locals)
+State.rightChrome = make("Frame", {
+	Name = "RightChrome",
+	Size = UDim2.fromOffset(180, 28),
+	Position = UDim2.new(1, -10, 0.5, 0),
 	AnchorPoint = Vector2.new(1, 0.5),
+	BackgroundTransparency = 1,
+	ZIndex = 10,
+})
+State.rightChrome.Parent = titleBar
+make("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal,
+	HorizontalAlignment = Enum.HorizontalAlignment.Right,
+	VerticalAlignment = Enum.VerticalAlignment.Center,
+	Padding = UDim.new(0, 6),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+}).Parent = State.rightChrome
+
+local fpsPill = make("Frame", {
+	Name = "FpsPill",
+	Size = UDim2.fromOffset(72, 22),
 	BackgroundColor3 = Theme.Element,
-	ZIndex = 3,
+	LayoutOrder = 10,
+	ZIndex = 11,
 }, { corner(6), stroke(Theme.Stroke, 1, 0.45) })
-fpsPill.Parent = titleBar
+fpsPill.Parent = State.rightChrome
 
 local fpsDot = make("Frame", {
 	Size = UDim2.fromOffset(6, 6),
@@ -2303,9 +2383,8 @@ end)
 local winControls = make("Frame", {
 	Name = "WinControls",
 	Size = UDim2.fromOffset(70, 28),
-	Position = UDim2.new(1, -12, 0.5, 0),
-	AnchorPoint = Vector2.new(1, 0.5),
 	BackgroundColor3 = Color3.fromRGB(22, 22, 26),
+	LayoutOrder = 30,
 	ZIndex = 12,
 }, {
 	corner(8),
@@ -2318,7 +2397,7 @@ local winControls = make("Frame", {
 		}),
 	}),
 })
-winControls.Parent = titleBar
+winControls.Parent = State.rightChrome
 
 local function chromeCtrl(iconName, x, isClose)
 	local btn = make("TextButton", {
@@ -2414,9 +2493,20 @@ local function computeMiniWidth()
 	local titleW = math.min(measureLabelWidth(titleLabel, 9), 100)
 	local hubW = hubLabel.Visible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
 	local verW = math.max(measureLabelWidth(versionLabel, 7), 28) + 12
-	local left = TitleL.left + titleW + 4 + hubW + TitleL.gap + verW + 20
-	local right = IS_MOBILE and 90 or (72 + 10 + 26 + 14 + 70 + 14)
-	return math.clamp(math.floor(left + right), 280, math.max(WIN_W, 280))
+	local premW = (State.premium and 58) or 0
+	-- Mini: brand left; version+premium+bell+controls in right chrome (FPS hidden)
+	local left = TitleL.left + titleW + 4 + hubW + 16
+	local right = verW + premW + 6 + 26 + 6 + 70 + 24
+	local chrome = State.rightChrome
+	pcall(function()
+		if chrome then
+			local lay = chrome:FindFirstChildOfClass("UIListLayout")
+			if lay and lay.AbsoluteContentSize.X > 40 then
+				right = lay.AbsoluteContentSize.X + 24
+			end
+		end
+	end)
+	return math.clamp(math.floor(left + right), 340, math.max(WIN_W, 340))
 end
 
 local function setResizeEnabled(on)
@@ -2882,7 +2972,7 @@ local hintLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
 	Size = UDim2.fromOffset(0, 0),
 	Visible = false,
-	Text = IS_MOBILE and "MH button - hide" or "RightShift - hide",
+	Text = "RightShift - hide",
 	TextSize = 9,
 	TextColor3 = Theme.SubText,
 })
@@ -2970,7 +3060,7 @@ make("TextLabel", {
 	Size = UDim2.new(1, -20, 0, 42),
 	Position = UDim2.fromOffset(10, 198),
 	Font = Enum.Font.Gotham,
-	Text = "v" .. LIBRARY_VERSION .. "\n" .. (IS_MOBILE and "Tap MH to hide" or "RightShift to hide"),
+	Text = "v" .. LIBRARY_VERSION .. "\nRightShift to hide",
 	TextSize = 11,
 	TextColor3 = Theme.SubText,
 	TextWrapped = true,
@@ -3933,6 +4023,12 @@ local function createParagraph(tab, title, body)
 	return {
 		Frame = holder,
 		Set = function(v)
+			bodyLabel.Text = tostring(v or "")
+		end,
+		SetText = function(v)
+			bodyLabel.Text = tostring(v or "")
+		end,
+		SetBody = function(v)
 			bodyLabel.Text = tostring(v or "")
 		end,
 		Get = function()
@@ -6511,6 +6607,11 @@ local function destroyGui()
 	uiVisible = false
 	runUnloadHooks()
 	destroyMobileHideButton()
+	pcall(function()
+		if type(State.destroyHiddenRestore) == "function" then
+			State.destroyHiddenRestore()
+		end
+	end)
 	if loaderHost and loaderHost.Parent then
 		pcall(function() loaderHost:Destroy() end)
 	end
@@ -6590,10 +6691,26 @@ end
 
 local function toggleWindow()
 	uiVisible = not uiVisible
-	if uiVisible then showWindow() else hideWindow() end
+	if uiVisible then
+		pcall(function()
+			if type(State.destroyHiddenRestore) == "function" then
+				State.destroyHiddenRestore()
+			end
+		end)
+		showWindow()
+	else
+		hideWindow()
+		task.defer(function()
+			pcall(function()
+				if type(State.showHiddenRestoreChip) == "function" then
+					State.showHiddenRestoreChip()
+				end
+			end)
+		end)
+	end
 end
 
--- Floating mobile hide button (touch devices can't rely on RightShift)
+-- Floating mobile hide button (opt-in only; never auto-show)
 destroyMobileHideButton = function()
 	if mobileHideGui and mobileHideGui.Parent then
 		pcall(function() mobileHideGui:Destroy() end)
@@ -6601,11 +6718,78 @@ destroyMobileHideButton = function()
 	mobileHideGui = nil
 end
 
+State.destroyHiddenRestore = function()
+	local g = State.hiddenRestoreGui
+	if g and g.Parent then
+		pcall(function() g:Destroy() end)
+	end
+	State.hiddenRestoreGui = nil
+end
+
+State.showHiddenRestoreChip = function()
+	if uiVisible or Flags.ShowMobileHideButton then
+		State.destroyHiddenRestore()
+		return false
+	end
+	local touch = false
+	pcall(function()
+		touch = UserInputService.TouchEnabled == true
+	end)
+	if not touch then
+		State.destroyHiddenRestore()
+		return false
+	end
+	local existing = State.hiddenRestoreGui
+	if existing and existing.Parent then
+		existing.Enabled = true
+		return true
+	end
+	local parentGui = screenGui and screenGui.Parent
+	if not parentGui then
+		pcall(function()
+			parentGui = (gethui and gethui()) or game:GetService("CoreGui")
+		end)
+	end
+	if not parentGui then return false end
+	local sg = make("ScreenGui", {
+		Name = "MilkyHiddenRestore",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 100000,
+	})
+	sg.Parent = parentGui
+	State.hiddenRestoreGui = sg
+	local btn = make("TextButton", {
+		Name = "RestoreBtn",
+		Size = UDim2.fromOffset(28, 28),
+		Position = UDim2.new(1, -36, 0, 12),
+		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.25,
+		Text = "+",
+		Font = Enum.Font.GothamBold,
+		TextSize = 14,
+		TextColor3 = Theme.SubText,
+		AutoButtonColor = true,
+		ZIndex = 100,
+	}, { corner(8), stroke(Theme.Stroke, 1, 0.4) })
+	btn.Parent = sg
+	btn.MouseButton1Click:Connect(function()
+		if not uiVisible then
+			toggleWindow()
+		end
+	end)
+	return true
+end
+
 showMobileHideButton = function(on)
-	if on == false then
+	if on ~= true then
+		Flags.ShowMobileHideButton = false
 		destroyMobileHideButton()
 		return false
 	end
+	Flags.ShowMobileHideButton = true
+	State.destroyHiddenRestore()
 	if mobileHideGui and mobileHideGui.Parent then
 		mobileHideGui.Enabled = true
 		return true
@@ -6628,19 +6812,19 @@ showMobileHideButton = function(on)
 	mobileHideGui = sg
 	local btn = make("TextButton", {
 		Name = "HideBtn",
-		Size = UDim2.fromOffset(56, 56),
-		Position = UDim2.new(1, -72, 0.55, 0),
+		Size = UDim2.fromOffset(40, 40),
+		Position = UDim2.new(1, -52, 0.55, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = Theme.Accent,
+		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.15,
 		Text = "MH",
 		Font = Enum.Font.GothamBold,
-		TextSize = 15,
-		TextColor3 = Color3.new(1, 1, 1),
+		TextSize = 12,
+		TextColor3 = Theme.Text,
 		AutoButtonColor = true,
 		ZIndex = 100,
-	}, { corner(16), stroke(Color3.new(1, 1, 1), 1, 0.55) })
+	}, { corner(12), stroke(Theme.Stroke, 1, 0.45) })
 	btn.Parent = sg
-	registerAccent(btn, "BackgroundColor3")
 	btn.MouseButton1Click:Connect(function()
 		toggleWindow()
 	end)
@@ -6656,7 +6840,6 @@ setRightRailVisible = function(on)
 	on = on and true or false
 	State.rightRailWant = on
 	local winW = root and root.Size.X.Offset or WIN_W
-	-- Auto-hide on narrow / mobile so content isn't cramped by an empty rail
 	local show = on and (not IS_MOBILE) and winW >= 700
 	RIGHT_RAIL_W = show and 120 or 0
 	pcall(function()
@@ -6673,7 +6856,6 @@ setRightRailVisible = function(on)
 	return show
 end
 
--- Keep rail in sync when window is resized
 pcall(function()
 	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
 		if State.rightRailWant then
@@ -6691,19 +6873,22 @@ setMobileMode = function(on)
 		if IS_MOBILE then
 			if setSizePreset then setSizePreset("Compact") end
 			setRightRailVisible(false)
-			showMobileHideButton(true)
-			if fpsPill and root.Size.X.Offset < 460 then
-				fpsPill.Visible = false
-				TitleL.reserve = 120
-			end
-			hintLabel.Text = "MH button - hide"
-		else
-			-- Desktop: keep rail off by default (content-first); API can re-enable
-			setRightRailVisible(State.rightRailWant == true)
-			if not UserInputService.TouchEnabled then
+			-- Never auto-show floating MH; opt-in via ShowMobileHideButton(true)
+			if Flags.ShowMobileHideButton then
+				showMobileHideButton(true)
+			else
 				destroyMobileHideButton()
 			end
-			if fpsPill then fpsPill.Visible = true end
+			local fps = titleBar:FindFirstChild("FpsPill", true)
+			if fps and root.Size.X.Offset < 460 then
+				fps.Visible = false
+			end
+			hintLabel.Text = (toggleKey and toggleKey.Name or "RightShift") .. " - hide"
+		else
+			setRightRailVisible(State.rightRailWant == true)
+			destroyMobileHideButton()
+			local fps = titleBar:FindFirstChild("FpsPill", true)
+			if fps and not minimized then fps.Visible = true end
 			TitleL.reserve = 210
 			hintLabel.Text = (toggleKey and toggleKey.Name or "RightShift") .. " - hide"
 		end
@@ -7527,11 +7712,10 @@ end
 
 local function createBellAndHistory()
 	if State.historyPanel and State.historyPanel.Parent then return State.historyPanel end
+	local chrome = State.rightChrome or titleBar
 	local bell = make("TextButton", {
 		Name = "NotifBell",
 		Size = UDim2.fromOffset(26, 26),
-		Position = UDim2.new(1, -96, 0.5, 0),
-		AnchorPoint = Vector2.new(1, 0.5),
 		BackgroundColor3 = Theme.Element,
 		BackgroundTransparency = 0.35,
 		Text = "i",
@@ -7539,9 +7723,11 @@ local function createBellAndHistory()
 		TextSize = 13,
 		TextColor3 = Theme.SubText,
 		AutoButtonColor = false,
+		LayoutOrder = 20,
 		ZIndex = 20,
 	}, { corner(7), stroke(Theme.Stroke, 1, 0.5) })
-	bell.Parent = titleBar
+	bell.Parent = chrome
+	State.notifBell = bell
 	local count = make("TextLabel", {
 		Name = "BellCount",
 		BackgroundColor3 = Theme.Error,
@@ -10181,7 +10367,7 @@ Milky.Window = {
 	end,
 	SetToggleKey = function(key)
 		toggleKey = key
-		hintLabel.Text = (IS_MOBILE and "MH button - hide") or (key.Name .. " - hide")
+		hintLabel.Text = (key and key.Name or "RightShift") .. " - hide"
 	end,
 	SetMobileMode = setMobileMode,
 	ShowMobileHideButton = showMobileHideButton,
@@ -10580,7 +10766,7 @@ homeTab:AddButton({
 	end,
 })
 homeTab:AddHotkeyHint({ "RightShift" }, "Toggle window (desktop)")
-homeTab:AddParagraph("Mobile", "On touch devices a floating MH button toggles the window. Right rail is hidden and hitboxes are larger.")
+homeTab:AddParagraph("Mobile", "RightShift / minimize hide the window. Floating MH is off by default (ShowMobileHideButton). Touch gets a tiny + restore chip only while fully hidden.")
 
 task.spawn(function()
 	local secs = 0
