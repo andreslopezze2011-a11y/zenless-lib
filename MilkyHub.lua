@@ -1,27 +1,23 @@
--- Milky Hub 0.0.5 - ScriptHub GUI Library (pink glass)
+-- Milky Hub 0.0.6 — pink glass GUI lib
 --[[
-  Usage (library mode):
-    getgenv().MILKY_DEFER_BOOT = true
-    local Milky = loadstring(readfile("MilkyHub.lua"))()
-    Milky:Boot({
-      KeySystem = {
-        VerifyURL = "https://milky.orender.com/api/verify?key=",
-        OnlineKeys = { "https://milky.orender.com/keys.txt" },
-        KeyLink = "https://milky.orender.com",
-      },
-      Loader = false,
-      DeferShow = true,
-    })
-    local Window = Milky:CreateWindow({ Title = "MILKY HUB", MinimizeKey = Enum.KeyCode.RightShift })
-    local tab = Window:AddTab({ Title = "Main", Icon = "home" })
-    tab:AddToggle({ Title = "Example", Default = false, Callback = function(v) end })
-    Window.Show()
+  getgenv().MILKY_DEFER_BOOT = true
+  local Milky = loadstring(readfile("MilkyHub.lua"))()
+  Milky:Boot({
+    KeySystem = {
+      VerifyURL = "https://milky.orender.com/api/verify?key=",
+      OnlineKeys = { "https://milky.orender.com/keys.txt" },
+      KeyLink = "https://milky.orender.com",
+    },
+    Loader = false,
+    DeferShow = true,
+  })
+  local Window = Milky:CreateWindow({ Title = "MILKY HUB", MinimizeKey = Enum.KeyCode.RightShift })
+  local tab = Window:AddTab({ Title = "Main", Icon = "home" })
+  tab:AddToggle({ Title = "Example", Default = false, Callback = function(v) end })
+  Window.Show()
 
-  Primary API:
-    Milky:CreateWindow / Milky.Window  |  Window:AddTab  |  Tab:AddToggle/Slider/Button/...
-    Milky:Boot  |  Milky:KeySystem  |  Milky:Notify
-  Aliases: Zenless, Fluent, Milky.Create, Milky.Init, Milky.AskKey
-  KeySystem: VerifyURL first, then OnlineKeys lists. Temp local key: owner
+  API: CreateWindow / AddTab / Boot / KeySystem / Notify
+  Aliases: Zenless, Fluent. Temp key: owner
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -62,35 +58,35 @@ end)
 getgenv().MilkyHubLoaded = false
 
 --
--- Structure:
--- Theme / Config -> Utilities -> Animations -> Core primitives
--- Icons -> Window shell -> Controls -> KeySystem / Boot -> Public API
-local LIBRARY_VERSION = "0.0.5"
+-- Regions (keep V6 API locals inside IIFE — Luau 200-register limit):
+--   config/theme · util · anim · primitives · icons
+--   window/shell · controls · keysystem · api / return
+local LIBRARY_VERSION = "0.0.6"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
--- ============ THEME / CONFIG (Milky Hub - soft pink glass) ============
+-- config/theme
 local Theme = {
-	Background   = Color3.fromRGB(16, 12, 16),
-	Sidebar      = Color3.fromRGB(22, 16, 20),
-	Layer        = Color3.fromRGB(26, 20, 24),
-	Element      = Color3.fromRGB(38, 30, 36),
-	ElementHover = Color3.fromRGB(50, 38, 46),
-	ElementPress = Color3.fromRGB(30, 22, 28),
-	Accent       = Color3.fromRGB(236, 148, 188), -- soft pink glass (not neon)
-	AccentHover  = Color3.fromRGB(248, 176, 208),
-	AccentSoft   = Color3.fromRGB(210, 130, 168),
-	Text         = Color3.fromRGB(250, 246, 248),
-	SubText      = Color3.fromRGB(186, 168, 178),
-	Stroke       = Color3.fromRGB(78, 58, 70),
+	Background   = Color3.fromRGB(14, 10, 14),
+	Sidebar      = Color3.fromRGB(20, 14, 18),
+	Layer        = Color3.fromRGB(24, 18, 22),
+	Element      = Color3.fromRGB(34, 26, 32),
+	ElementHover = Color3.fromRGB(46, 34, 42),
+	ElementPress = Color3.fromRGB(28, 20, 26),
+	Accent       = Color3.fromRGB(228, 150, 186), -- muted rose glass
+	AccentHover  = Color3.fromRGB(240, 172, 202),
+	AccentSoft   = Color3.fromRGB(196, 128, 162),
+	Text         = Color3.fromRGB(248, 244, 246),
+	SubText      = Color3.fromRGB(168, 152, 162),
+	Stroke       = Color3.fromRGB(68, 50, 62),
 	Highlight    = Color3.fromRGB(255, 255, 255),
-	Success      = Color3.fromRGB(110, 200, 140),
-	Warning      = Color3.fromRGB(220, 180, 100),
-	Error        = Color3.fromRGB(220, 90, 100),
-	Glass        = Color3.fromRGB(18, 12, 16),
-	OffToggle    = Color3.fromRGB(52, 42, 50),
+	Success      = Color3.fromRGB(104, 186, 132),
+	Warning      = Color3.fromRGB(210, 172, 96),
+	Error        = Color3.fromRGB(210, 92, 104),
+	Glass        = Color3.fromRGB(16, 11, 15),
+	OffToggle    = Color3.fromRGB(46, 36, 44),
 }
 local DarkThemeBackup = table.clone and table.clone(Theme) or nil
 if not DarkThemeBackup then
@@ -108,22 +104,23 @@ local function registerText(obj)
 	if obj then table.insert(textRegistry, obj) end
 end
 
+-- anim
 local Anim = {
-	Fast   = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Smooth = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Spring = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Snap   = TweenInfo.new(0.07, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Fast   = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Smooth = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Spring = TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Snap   = TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 	Linear = TweenInfo.new(0.2, Enum.EasingStyle.Linear),
-	Sidebar = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Minimize = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Press  = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Release = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Shine  = TweenInfo.new(0.58, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-	Soft   = TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-	Nav    = TweenInfo.new(0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Sidebar = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Minimize = TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Press  = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Release = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Shine  = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	Soft   = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+	Nav    = TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
--- ============ FLAGS / SERVICES ============
+-- util (flags / config / helpers)
 local Flags = {
 	NoAnimations = false,
 	ReduceMotion = false,
@@ -444,9 +441,8 @@ local function stroke(color, thickness, transparency)
 end
 
 --
--- Frame-drawn icons (no unicode - Gotham can't render most glyphs).
+-- icons (vector glyphs — no unicode)
 -- Usage: local icon = drawIcon(parent, "target", Theme.Accent, 16)
--- icon.SetColor(newColor)
 local IconAliases = {
 	["c"] = "target", combat = "target", aimbot = "target", crosshair = "target",
 	["e"] = "eye", esp = "eye", visuals = "eye", view = "eye",
@@ -810,12 +806,13 @@ local function attachPerimeterLight(parent, opts)
 end
 
 local function cardLit()
+	-- soft rose wash instead of cold gray metal
 	return make("UIGradient", {
-		Rotation = 90,
+		Rotation = 92,
 		Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-			ColorSequenceKeypoint.new(0.45, Color3.fromRGB(245, 245, 248)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(210, 210, 218)),
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 248, 252)),
+			ColorSequenceKeypoint.new(0.42, Color3.fromRGB(246, 232, 240)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(214, 190, 204)),
 		}),
 	})
 end
@@ -825,7 +822,7 @@ local function topHighlight(parent)
 		Size = UDim2.new(1, -2, 0, 1),
 		Position = UDim2.fromOffset(1, 0),
 		BackgroundColor3 = Theme.Highlight,
-		BackgroundTransparency = 0.88,
+		BackgroundTransparency = 0.9,
 		BorderSizePixel = 0,
 		ZIndex = 3,
 	})
@@ -833,7 +830,7 @@ local function topHighlight(parent)
 	return line
 end
 
--- ============ VISUAL FX ============
+-- primitives / fx
 local fxLayer = nil
 local activeDustThreads = {}
 
@@ -1316,9 +1313,9 @@ scaleHost.Parent = root
 local windowScale = make("UIScale", { Scale = 0.92 })
 windowScale.Parent = scaleHost
 
--- Soft pink glass rim (no heavy outer halo)
-local windowStroke = stroke(Color3.fromRGB(255, 190, 210), 1, 0.62)
-local windowAccentStroke = stroke(Theme.Accent, 1.15, 0.48)
+-- glass rim — thin, not neon
+local windowStroke = stroke(Color3.fromRGB(236, 188, 208), 1, 0.68)
+local windowAccentStroke = stroke(Theme.Accent, 1, 0.55)
 registerAccent(windowAccentStroke, "Color")
 registerAccent(windowStroke, "Color")
 
@@ -1326,32 +1323,31 @@ local window = make("CanvasGroup", {
 	Name = "Window",
 	Size = UDim2.new(1, 0, 1, 0),
 	BackgroundColor3 = Theme.Background,
-	BackgroundTransparency = 0.1,
+	BackgroundTransparency = 0.08,
 	BorderSizePixel = 0,
 	GroupTransparency = 1,
 	Visible = false,
 	ZIndex = 2,
-}, { corner(16), windowStroke, windowAccentStroke })
+}, { corner(14), windowStroke, windowAccentStroke })
 window.Parent = scaleHost
 
--- Rich multi-stop pink glass sheen
 local bgSheenGradient = make("UIGradient", {
-	Rotation = 132,
+	Rotation = 128,
 	Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(58, 34, 48)),
-		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(32, 20, 28)),
-		ColorSequenceKeypoint.new(0.58, Theme.Background),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 8, 12)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 28, 40)),
+		ColorSequenceKeypoint.new(0.3, Color3.fromRGB(28, 18, 24)),
+		ColorSequenceKeypoint.new(0.62, Theme.Background),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 7, 11)),
 	}),
 })
 
 local bgSheen = make("Frame", {
 	Size = UDim2.new(1, 0, 1, 0),
 	BackgroundColor3 = Color3.new(1, 1, 1),
-	BackgroundTransparency = 0.1,
+	BackgroundTransparency = 0.12,
 	BorderSizePixel = 0,
 	ZIndex = 0,
-}, { corner(16), bgSheenGradient })
+}, { corner(14), bgSheenGradient })
 bgSheen.Parent = window
 
 createGridOverlay(window, 28, 0.945)
@@ -1956,15 +1952,17 @@ end
 
 end)()
 
--- ============ TITLE BAR ============
+-- window/shell — title bar
+-- Row 1: avatar · MILKY HUB · version · chrome   |  Row 2: game subtitle only
 local titleBar = make("Frame", {
 	Name = "TitleBar",
 	Size = UDim2.new(1, 0, 0, MINI_H),
 	BackgroundColor3 = Theme.Layer,
+	BackgroundTransparency = 0.04,
 	BorderSizePixel = 0,
 	ZIndex = 2,
 }, {
-	corner(10),
+	corner(12),
 	cardLit(),
 })
 titleBar.Parent = window
@@ -2016,9 +2014,9 @@ local titleLabel = make("TextLabel", {
 	BackgroundTransparency = 1,
 	Size = UDim2.fromOffset(54, TitleL.brandH),
 	Position = UDim2.fromOffset(TitleL.left, TitleL.padY),
-	Font = Enum.Font.GothamBold,
+	Font = Enum.Font.GothamBlack,
 	Text = "MILKY",
-	TextSize = 14,
+	TextSize = 15,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextYAlignment = Enum.TextYAlignment.Center,
@@ -2034,7 +2032,7 @@ local hubLabel = make("TextLabel", {
 	Position = UDim2.fromOffset(TitleL.left, TitleL.padY),
 	Font = Enum.Font.GothamBold,
 	Text = "HUB",
-	TextSize = 14,
+	TextSize = 15,
 	TextColor3 = Theme.Accent,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextYAlignment = Enum.TextYAlignment.Center,
@@ -2043,7 +2041,7 @@ local hubLabel = make("TextLabel", {
 hubLabel.Parent = titleBar
 registerAccent(hubLabel, "TextColor3")
 
--- Game subtitle: OWN line under brand (never beside version)
+-- subtitle sits under brand — never beside version
 local gameTitleLabel = make("TextLabel", {
 	Name = "GameTitle",
 	BackgroundTransparency = 1,
@@ -2053,6 +2051,7 @@ local gameTitleLabel = make("TextLabel", {
 	Text = "",
 	TextSize = 11,
 	TextColor3 = Theme.SubText,
+	TextTransparency = 0.08,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextYAlignment = Enum.TextYAlignment.Center,
 	TextTruncate = Enum.TextTruncate.AtEnd,
@@ -2061,16 +2060,15 @@ local gameTitleLabel = make("TextLabel", {
 })
 gameTitleLabel.Parent = titleBar
 
--- Version chip (exclusive slot after brand on row 1) — stored on State to avoid a chunk local
 State.versionChip = make("Frame", {
 	Name = "VersionChip",
 	Size = UDim2.fromOffset(44, 18),
 	Position = UDim2.fromOffset(TitleL.left, TitleL.padY + 4),
 	BackgroundColor3 = Theme.Element,
-	BackgroundTransparency = 0.25,
+	BackgroundTransparency = 0.35,
 	BorderSizePixel = 0,
 	ZIndex = 5,
-}, { corner(5), stroke(Theme.Stroke, 1, 0.55) })
+}, { corner(6), stroke(Theme.Stroke, 1, 0.62) })
 State.versionChip.Parent = titleBar
 
 local versionLabel = make("TextLabel", {
@@ -2720,9 +2718,8 @@ pcall(function()
 	if w and w.preset then State.currentPreset = w.preset end
 end)
 
--- ============ WINDOW SHELL - BODY (top pill nav + content) ============
--- Fill remaining space under title bar
-local NAV_H = 44
+-- body + top nav + content
+local NAV_H = 46
 local body = make("Frame", {
 	Name = "Body",
 	Size = UDim2.new(1, 0, 1, -MINI_H),
@@ -2733,15 +2730,14 @@ local body = make("Frame", {
 })
 body.Parent = window
 
--- Top horizontal nav (pill tabs) - replaces left sidebar as primary navigation
 local sidebar = make("Frame", {
 	Name = "TopNav",
 	Size = UDim2.new(1, -16, 0, NAV_H),
-	Position = UDim2.fromOffset(8, 6),
+	Position = UDim2.fromOffset(8, 8),
 	BackgroundColor3 = Theme.Sidebar,
-	BackgroundTransparency = 0.15,
+	BackgroundTransparency = 0.22,
 	BorderSizePixel = 0,
-}, { corner(12), stroke(Theme.Stroke, 1, 0.55), cardLit() })
+}, { corner(11), stroke(Theme.Stroke, 1, 0.62), cardLit() })
 sidebar.Parent = body
 
 local tabHolder = make("ScrollingFrame", {
@@ -2759,7 +2755,7 @@ local tabHolder = make("ScrollingFrame", {
 tabHolder.Parent = sidebar
 
 make("UIListLayout", {
-	Padding = UDim.new(0, 8),
+	Padding = UDim.new(0, 6),
 	FillDirection = Enum.FillDirection.Horizontal,
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -2767,8 +2763,8 @@ make("UIListLayout", {
 }).Parent = tabHolder
 
 make("UIPadding", {
-	PaddingTop = UDim.new(0, 6),
-	PaddingBottom = UDim.new(0, 6),
+	PaddingTop = UDim.new(0, 7),
+	PaddingBottom = UDim.new(0, 7),
 	PaddingLeft = UDim.new(0, 6),
 	PaddingRight = UDim.new(0, 6),
 }).Parent = tabHolder
@@ -2782,14 +2778,13 @@ local navLabel = make("TextLabel", {
 })
 navLabel.Parent = sidebar
 
--- Thin pink underline indicator under active pill
 local tabIndicator = make("Frame", {
 	Name = "TabUnderline",
-	Size = UDim2.fromOffset(48, 2),
+	Size = UDim2.fromOffset(44, 2),
 	BackgroundColor3 = Theme.Accent,
-	BackgroundTransparency = 0,
+	BackgroundTransparency = 0.08,
 	BorderSizePixel = 0,
-	Position = UDim2.fromOffset(16, NAV_H - 4),
+	Position = UDim2.fromOffset(16, NAV_H - 5),
 	ZIndex = 5,
 	Visible = true,
 }, { corner(1) })
@@ -2797,11 +2792,11 @@ tabIndicator.Parent = sidebar
 registerAccent(tabIndicator, "BackgroundColor3")
 
 local tabIndicatorGlow = make("Frame", {
-	Size = UDim2.new(1, 8, 0, 4),
+	Size = UDim2.new(1, 6, 0, 3),
 	Position = UDim2.new(0.5, 0, 0.5, 0),
 	AnchorPoint = Vector2.new(0.5, 0.5),
 	BackgroundColor3 = Theme.AccentSoft,
-	BackgroundTransparency = 0.85,
+	BackgroundTransparency = 0.9,
 	BorderSizePixel = 0,
 	ZIndex = 4,
 }, { corner(2) })
@@ -2894,30 +2889,29 @@ local hintLabel = make("TextLabel", {
 hintLabel.Parent = userCard
 userCard.ClipsDescendants = true
 
--- Content panel under top nav (full width by default — right rail auto-hides when narrow)
 local RIGHT_RAIL_W = 0
-State.rightRailWant = false -- user/API preference; width gate still applies
+State.rightRailWant = false
 local contentPanel = make("Frame", {
 	Name = "ContentPanel",
-	Size = UDim2.new(1, -16, 1, -(NAV_H + 20)),
-	Position = UDim2.fromOffset(8, NAV_H + 12),
+	Size = UDim2.new(1, -16, 1, -(NAV_H + 22)),
+	Position = UDim2.fromOffset(8, NAV_H + 14),
 	BackgroundColor3 = Theme.Layer,
-	BackgroundTransparency = 0.18,
+	BackgroundTransparency = 0.22,
 	BorderSizePixel = 0,
-}, { corner(12), stroke(Theme.Stroke, 1, 0.55), cardLit() })
+}, { corner(11), stroke(Theme.Stroke, 1, 0.6), cardLit() })
 contentPanel.Parent = body
 topHighlight(contentPanel)
 
 local rightRail = make("Frame", {
 	Name = "RightRail",
-	Size = UDim2.new(0, 1, 1, -(NAV_H + 20)),
-	Position = UDim2.new(1, -9, 0, NAV_H + 12),
+	Size = UDim2.new(0, 1, 1, -(NAV_H + 22)),
+	Position = UDim2.new(1, -9, 0, NAV_H + 14),
 	BackgroundColor3 = Theme.Sidebar,
-	BackgroundTransparency = 0.18,
+	BackgroundTransparency = 0.22,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
 	Visible = false,
-}, { corner(12), stroke(Theme.Stroke, 1, 0.55), cardLit() })
+}, { corner(11), stroke(Theme.Stroke, 1, 0.6), cardLit() })
 rightRail.Parent = body
 
 local rightArtGlow = make("Frame", {
@@ -2984,6 +2978,21 @@ make("TextLabel", {
 	ZIndex = 2,
 }).Parent = rightRail
 
+make("TextLabel", {
+	Name = "RailHint",
+	BackgroundTransparency = 1,
+	Size = UDim2.new(1, -24, 0, 36),
+	Position = UDim2.fromOffset(12, 250),
+	Font = Enum.Font.Gotham,
+	Text = "Quiet glass panel.\nOptional side art.",
+	TextSize = 10,
+	TextColor3 = Theme.SubText,
+	TextTransparency = 0.25,
+	TextWrapped = true,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	ZIndex = 2,
+}).Parent = rightRail
+
 local contentArea = make("Frame", {
 	Name = "Content",
 	Size = UDim2.new(1, -12, 1, -36),
@@ -2993,15 +3002,49 @@ local contentArea = make("Frame", {
 })
 contentArea.Parent = contentPanel
 
+-- shown when a tab page has no children yet
+local emptyState = make("Frame", {
+	Name = "EmptyState",
+	Size = UDim2.new(1, -24, 0, 72),
+	Position = UDim2.new(0.5, 0, 0.42, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundTransparency = 1,
+	Visible = false,
+	ZIndex = 1,
+})
+emptyState.Parent = contentArea
+make("TextLabel", {
+	BackgroundTransparency = 1,
+	Size = UDim2.new(1, 0, 0, 22),
+	Font = Enum.Font.GothamMedium,
+	Text = "Nothing here yet",
+	TextSize = 13,
+	TextColor3 = Theme.Text,
+	TextTransparency = 0.2,
+	TextXAlignment = Enum.TextXAlignment.Center,
+}).Parent = emptyState
+make("TextLabel", {
+	BackgroundTransparency = 1,
+	Size = UDim2.new(1, 0, 0, 18),
+	Position = UDim2.fromOffset(0, 26),
+	Font = Enum.Font.Gotham,
+	Text = "Pick a tab or add controls.",
+	TextSize = 11,
+	TextColor3 = Theme.SubText,
+	TextTransparency = 0.15,
+	TextXAlignment = Enum.TextXAlignment.Center,
+}).Parent = emptyState
+State.emptyState = emptyState
+
 -- Status bar: live clock + player name (clear of scroll content)
 local contentFooter = make("Frame", {
 	Size = UDim2.new(1, -16, 0, 22),
 	Position = UDim2.new(0, 8, 1, -28),
 	BackgroundColor3 = Theme.Element,
-	BackgroundTransparency = 0.4,
+	BackgroundTransparency = 0.48,
 	BorderSizePixel = 0,
 	ZIndex = 3,
-}, { corner(6), stroke(Theme.Stroke, 1, 0.6) })
+}, { corner(7), stroke(Theme.Stroke, 1, 0.68) })
 contentFooter.Parent = contentPanel
 
 local statusDot = make("Frame", {
@@ -3049,20 +3092,20 @@ task.spawn(function()
 	end
 end)
 
--- Soft corner accents (subtle pink marks)
+-- soft corner ticks
 do
 	local marks = {
-		{ UDim2.fromOffset(4, 4), UDim2.fromOffset(14, 2) },
-		{ UDim2.fromOffset(4, 4), UDim2.fromOffset(2, 14) },
-		{ UDim2.new(1, -18, 1, -6), UDim2.fromOffset(14, 2) },
-		{ UDim2.new(1, -6, 1, -18), UDim2.fromOffset(2, 14) },
+		{ UDim2.fromOffset(5, 5), UDim2.fromOffset(12, 1) },
+		{ UDim2.fromOffset(5, 5), UDim2.fromOffset(1, 12) },
+		{ UDim2.new(1, -17, 1, -6), UDim2.fromOffset(12, 1) },
+		{ UDim2.new(1, -6, 1, -17), UDim2.fromOffset(1, 12) },
 	}
 	for _, m in ipairs(marks) do
 		local f = make("Frame", {
 			Size = m[2],
 			Position = m[1],
 			BackgroundColor3 = Theme.Accent,
-			BackgroundTransparency = 0.55,
+			BackgroundTransparency = 0.72,
 			BorderSizePixel = 0,
 			ZIndex = 5,
 		})
@@ -3443,7 +3486,7 @@ end
 
 end)()
 
--- ============ TABS ============
+-- tabs
 local tabs = {}
 local activeTab = nil
 
@@ -3452,7 +3495,20 @@ local function switchTab(tab)
 	local prev = activeTab
 	activeTab = tab
 	playUiSound("click")
-
+	pcall(function()
+		local es = State.emptyState
+		if es then
+			local n = 0
+			if tab and tab.Container then
+				for _, ch in ipairs(tab.Container:GetChildren()) do
+					if not ch:IsA("UIListLayout") and not ch:IsA("UIPadding") then
+						n = n + 1
+					end
+				end
+			end
+			es.Visible = n == 0
+		end
+	end)
 	for _, t in ipairs(tabs) do
 		local on = (t == tab)
 		tween(t.Button, Anim.Soft, {
@@ -3531,17 +3587,17 @@ local function switchTab(tab)
 end
 
 local tabDefaults = {
-	Main     = { color = Color3.fromRGB(255, 182, 193), icon = "home", sub = "Overview" },
-	Home     = { color = Color3.fromRGB(255, 182, 193), icon = "home", sub = "Overview" },
-	Player   = { color = Color3.fromRGB(255, 170, 190), icon = "user", sub = "Movement" },
-	Visuals  = { color = Color3.fromRGB(255, 200, 210), icon = "eye", sub = "World" },
-	Misc     = { color = Color3.fromRGB(220, 160, 180), icon = "star", sub = "Extras" },
-	Config   = { color = Color3.fromRGB(200, 150, 170), icon = "settings", sub = "Options" },
-	World    = { color = Color3.fromRGB(255, 182, 193), icon = "world", sub = "Misc" },
-	Combat   = { color = Color3.fromRGB(255, 140, 160), icon = "target", sub = "Aimbot" },
-	ESP      = { color = Color3.fromRGB(180, 160, 220), icon = "eye", sub = "Visuals" },
-	Extras   = { color = Color3.fromRGB(220, 160, 180), icon = "star", sub = "Tools" },
-	Settings = { color = Color3.fromRGB(200, 150, 170), icon = "settings", sub = "Options" },
+	Main     = { color = Color3.fromRGB(228, 160, 186), icon = "home", sub = "Overview" },
+	Home     = { color = Color3.fromRGB(228, 160, 186), icon = "home", sub = "Overview" },
+	Player   = { color = Color3.fromRGB(214, 152, 176), icon = "user", sub = "Movement" },
+	Visuals  = { color = Color3.fromRGB(232, 176, 196), icon = "eye", sub = "World" },
+	Misc     = { color = Color3.fromRGB(200, 148, 168), icon = "star", sub = "Extras" },
+	Config   = { color = Color3.fromRGB(186, 142, 164), icon = "settings", sub = "Options" },
+	World    = { color = Color3.fromRGB(228, 160, 186), icon = "world", sub = "Misc" },
+	Combat   = { color = Color3.fromRGB(220, 140, 162), icon = "target", sub = "Aimbot" },
+	ESP      = { color = Color3.fromRGB(176, 152, 188), icon = "eye", sub = "Visuals" },
+	Extras   = { color = Color3.fromRGB(200, 148, 168), icon = "star", sub = "Tools" },
+	Settings = { color = Color3.fromRGB(186, 142, 164), icon = "settings", sub = "Options" },
 }
 
 local bindTabAPI -- forward decl; filled after control factories
@@ -3564,26 +3620,26 @@ local function createTab(nameOrConfig)
 
 	local btn = make("TextButton", {
 		Name = name,
-		Size = UDim2.fromOffset(pillW, 32),
+		Size = UDim2.fromOffset(pillW, 30),
 		BackgroundColor3 = Theme.Element,
 		BackgroundTransparency = 1,
 		Text = "",
 		AutoButtonColor = false,
 		LayoutOrder = #tabs + 1,
 		ClipsDescendants = true,
-	}, { corner(16), stroke(Theme.Stroke, 1, 0.85) })
+	}, { corner(10), stroke(Theme.Stroke, 1, 0.88) })
 	btn.Parent = tabHolder
 
 	local iconBg = make("Frame", {
 		Name = "IconBg",
-		Size = UDim2.fromOffset(22, 22),
+		Size = UDim2.fromOffset(20, 20),
 		Position = UDim2.fromOffset(6, 5),
-		BackgroundColor3 = Color3.fromRGB(32, 24, 30),
-		BackgroundTransparency = 0.45,
+		BackgroundColor3 = Color3.fromRGB(28, 20, 26),
+		BackgroundTransparency = 0.5,
 		ZIndex = 2,
 	}, {
-		corner(11),
-		stroke(Theme.Accent, 1, 0.72),
+		corner(8),
+		stroke(Theme.Accent, 1, 0.78),
 	})
 	iconBg.Parent = btn
 	pcall(function()
@@ -3591,7 +3647,7 @@ local function createTab(nameOrConfig)
 		if st then registerAccent(st, "Color") end
 	end)
 
-	local iconApi = drawIcon(iconBg, iconName, iconColor, 12)
+	local iconApi = drawIcon(iconBg, iconName, iconColor, 11)
 	local iconGlyph = make("TextLabel", {
 		Name = "IconGlyph",
 		BackgroundTransparency = 1,
@@ -3604,8 +3660,8 @@ local function createTab(nameOrConfig)
 
 	local label = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -34, 1, 0),
-		Position = UDim2.fromOffset(30, 0),
+		Size = UDim2.new(1, -32, 1, 0),
+		Position = UDim2.fromOffset(28, 0),
 		Font = Enum.Font.GothamMedium,
 		Text = name,
 		TextSize = 12,
@@ -3662,15 +3718,15 @@ local function createTab(nameOrConfig)
 	registerAccent(scroll, "ScrollBarImageColor3")
 
 	make("UIListLayout", {
-		Padding = UDim.new(0, 9),
+		Padding = UDim.new(0, 10),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}).Parent = scroll
 
 	make("UIPadding", {
-		PaddingTop = UDim.new(0, 8),
-		PaddingBottom = UDim.new(0, 14),
-		PaddingLeft = UDim.new(0, 8),
-		PaddingRight = UDim.new(0, 10),
+		PaddingTop = UDim.new(0, 10),
+		PaddingBottom = UDim.new(0, 16),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 12),
 	}).Parent = scroll
 
 	local tab = {
@@ -3716,7 +3772,7 @@ local function createTab(nameOrConfig)
 	return tab
 end
 
--- ============ CONTROLS ============
+-- controls
 local showConfirmModal -- assigned later (confirm modal)
 local order = 0
 local function nextOrder()
@@ -3726,7 +3782,7 @@ end
 
 local function styleCard(holder)
 	local premium = State.premium == true
-	local s = stroke(premium and Theme.Accent or Theme.Stroke, 1, premium and 0.36 or 0.4)
+	local s = stroke(premium and Theme.Accent or Theme.Stroke, 1, premium and 0.42 or 0.48)
 	s.Parent = holder
 	if premium then registerAccent(s, "Color") end
 	cardLit().Parent = holder
@@ -3746,11 +3802,11 @@ local function hoverCard(holder, cardStroke, cardScale)
 		if cardStroke then
 			tween(cardStroke, Anim.Soft, {
 				Color = Theme.Accent,
-				Transparency = prem and 0.28 or 0.32,
+				Transparency = prem and 0.34 or 0.4,
 			})
 		end
 		if cardScale then
-			tween(cardScale, Anim.Soft, { Scale = prem and 1.022 or 1.018 })
+			tween(cardScale, Anim.Soft, { Scale = prem and 1.014 or 1.01 })
 		end
 	end)
 	holder.MouseLeave:Connect(function()
@@ -3759,7 +3815,7 @@ local function hoverCard(holder, cardStroke, cardScale)
 		if cardStroke then
 			tween(cardStroke, Anim.Soft, {
 				Color = prem and Theme.Accent or Theme.Stroke,
-				Transparency = prem and 0.36 or 0.4,
+				Transparency = prem and 0.42 or 0.48,
 			})
 		end
 		if cardScale then
@@ -3769,10 +3825,9 @@ local function hoverCard(holder, cardStroke, cardScale)
 end
 
 local function createLabel(tab, text)
-	-- Section header with breathing room
 	local premium = State.premium == true
 	local wrap = make("Frame", {
-		Size = UDim2.new(1, 0, 0, premium and 38 or 36),
+		Size = UDim2.new(1, 0, 0, premium and 40 or 38),
 		BackgroundTransparency = 1,
 		LayoutOrder = nextOrder(),
 	})
@@ -3782,14 +3837,14 @@ local function createLabel(tab, text)
 		Size = UDim2.new(1, 0, 0, premium and 30 or 28),
 		Position = UDim2.fromOffset(0, 6),
 		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.4,
+		BackgroundTransparency = 0.48,
 		BorderSizePixel = 0,
-	}, { corner(8), stroke(Theme.Stroke, 1, 0.5) })
+	}, { corner(8), stroke(Theme.Stroke, 1, 0.58) })
 	row.Parent = wrap
 	row:SetAttribute("MilkySection", true)
 
 	local tick = make("Frame", {
-		Size = UDim2.fromOffset(3, premium and 14 or 12),
+		Size = UDim2.fromOffset(3, premium and 13 or 11),
 		Position = UDim2.fromOffset(10, premium and 8 or 8),
 		BackgroundColor3 = Theme.Accent,
 		BorderSizePixel = 0,
@@ -3904,7 +3959,7 @@ local function createButton(tab, text, callback, primary, opts)
 		textColor = Theme.Accent
 	end
 
-	local rowH = Flags.LargeHitboxes and 46 or 40
+	local rowH = Flags.LargeHitboxes and 46 or 38
 	local btn = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = baseColor,
@@ -3915,7 +3970,7 @@ local function createButton(tab, text, callback, primary, opts)
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
 		ClipsDescendants = true,
-	}, { corner(9) })
+	}, { corner(10) })
 	btn.Parent = tab.Container
 	btn:SetAttribute("MilkyTitle", text)
 	table.insert(State.focusables, btn)
@@ -3923,19 +3978,19 @@ local function createButton(tab, text, callback, primary, opts)
 	if isPrimary then
 		registerAccent(btn, "BackgroundColor3")
 		make("UIGradient", {
-			Rotation = 112,
+			Rotation = 108,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 210, 230)),
-				ColorSequenceKeypoint.new(0.45, Color3.fromRGB(255, 141, 199)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(230, 110, 170)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(244, 198, 218)),
+				ColorSequenceKeypoint.new(0.48, Color3.fromRGB(228, 148, 186)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(196, 118, 158)),
 			}),
 		}).Parent = btn
 	elseif isDanger then
 		make("UIGradient", {
-			Rotation = 112,
+			Rotation = 108,
 			Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 140, 140)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 50, 50)),
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(230, 130, 130)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(168, 54, 62)),
 			}),
 		}).Parent = btn
 	else
@@ -4102,11 +4157,11 @@ local function createToggle(tab, text, default, callback, opts)
 	local holder = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.08,
+		BackgroundTransparency = 0.12,
 		Text = "",
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
-	}, { corner(9) })
+	}, { corner(10) })
 	holder.Parent = tab.Container
 	holder:SetAttribute("MilkyTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
@@ -4134,33 +4189,33 @@ local function createToggle(tab, text, default, callback, opts)
 			Text = desc,
 			TextSize = 10,
 			TextColor3 = Theme.SubText,
-			TextTransparency = 0.15,
+			TextTransparency = 0.12,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		}).Parent = holder
 	end
 
 	local track = make("Frame", {
-		Size = UDim2.fromOffset(44, 24),
-		Position = UDim2.new(1, -56, 0.5, 0),
+		Size = UDim2.fromOffset(42, 22),
+		Position = UDim2.new(1, -54, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(48, 44, 50)),
-	}, { corner(12) })
+		BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(46, 36, 44)),
+	}, { corner(11) })
 	track.Parent = holder
 	registerAccent(track, "BackgroundColor3")
 
 	local knob = make("Frame", {
-		Size = UDim2.fromOffset(18, 18),
-		Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+		Size = UDim2.fromOffset(16, 16),
+		Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor3 = Color3.new(1, 1, 1),
-	}, { corner(9) })
+		BackgroundColor3 = Color3.fromRGB(252, 248, 250),
+	}, { corner(8) })
 	knob.Parent = track
 
 	local api
 	local function render()
-		tween(track, Anim.Fast, { BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(48, 44, 50)) })
-		tween(knob, Anim.Smooth, { Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0) })
+		tween(track, Anim.Fast, { BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(46, 36, 44)) })
+		tween(knob, Anim.Smooth, { Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0) })
 	end
 
 	api = {
@@ -4187,18 +4242,14 @@ local function createToggle(tab, text, default, callback, opts)
 			end
 			api.Set(true)
 		elseif group and state then
-			-- radio: keep one on
 			return
 		else
 			api.Set(not state)
 		end
-		if state then
-			sparkBurst(track, 22, 12, Theme.Accent, 6)
-		end
+		-- quiet click — no spark burst
 	end)
-	-- Touch-friendly: Activated fires for tap on mobile executors
 	pcall(function()
-		holder.Activated:Connect(function() end) -- ensure Active path; click already handles
+		holder.Activated:Connect(function() end)
 	end)
 
 	render()
@@ -4220,11 +4271,11 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 	end)
 
 	local holder = make("Frame", {
-		Size = UDim2.new(1, 0, 0, 60),
+		Size = UDim2.new(1, 0, 0, 58),
 		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.08,
+		BackgroundTransparency = 0.12,
 		LayoutOrder = nextOrder(),
-	}, { corner(9) })
+	}, { corner(10) })
 	holder.Parent = tab.Container
 	holder:SetAttribute("MilkyTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
@@ -4246,10 +4297,10 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 		Size = UDim2.fromOffset(52, 20),
 		Position = UDim2.new(1, -64, 0, 8),
 		BackgroundColor3 = Theme.Accent,
-		BackgroundTransparency = 0.82,
+		BackgroundTransparency = 0.86,
 		Text = "",
 		AutoButtonColor = false,
-	}, { corner(5) })
+	}, { corner(6) })
 	valueChip.Parent = holder
 	registerAccent(valueChip, "BackgroundColor3")
 
@@ -4278,10 +4329,10 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 	valueBox.Parent = valueChip
 
 	local track = make("Frame", {
-		Size = UDim2.new(1, -28, 0, 8),
-		Position = UDim2.new(0, 14, 1, -20),
-		BackgroundColor3 = Color3.fromRGB(48, 44, 50),
-	}, { corner(4) })
+		Size = UDim2.new(1, -28, 0, 6),
+		Position = UDim2.new(0, 14, 1, -18),
+		BackgroundColor3 = Color3.fromRGB(42, 34, 40),
+	}, { corner(3) })
 	track.Parent = holder
 
 	local function snapVal(v)
@@ -5079,9 +5130,9 @@ local function setAccent(color)
 	end
 end
 
--- Soft warm silver (premium reads cleaner than standard, not flashy gold)
-local PREMIUM_ACCENT = Color3.fromRGB(255, 182, 193)
-local STANDARD_ACCENT = Color3.fromRGB(255, 160, 180)
+-- muted rose (premium chrome without candy pink)
+local PREMIUM_ACCENT = Color3.fromRGB(228, 160, 186)
+local STANDARD_ACCENT = Color3.fromRGB(210, 148, 172)
 local Milky -- forward declare for applyPremiumMode sync
 
 local function ensurePremiumBadge()
@@ -6639,15 +6690,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
--- ============ V6 MEGA CHUNK ============
--- Forward API locals MUST live inside this IIFE. Declaring them in the main chunk
--- exceeds Luau's 200 local-register limit (compile error at SetNotificationMode).
+-- V6 mega chunk — API locals stay inside this IIFE (200-register fix)
 ;(function()
 local enhanceTab, NotifyProgress, applyV6PublicAPI, SetNotificationMode, closeTab, cycleTab
 local createFOVOverlay, setControlByFlag, applyControlsMap, bindLive
--- ============ ZENLESS V6 CHUNK (splice into FluentGui.lua, same scope) ============
--- Place AFTER: local minimized / window shell / createTab / notify / tabs exist.
--- bindTabAPI / createTab should call enhanceTab(tab) - wrapper below also does this.
+-- shell helpers + confirm/modal live here with the rest of V6
 
 -- ---- 1) Confirm modal ----
 showConfirmModal = function(title, body, onYes)
@@ -8863,7 +8910,7 @@ end)
 
 end)()
 
--- ============ KEY SYSTEM (Premium ScriptHub Gate) ============
+-- keysystem
 local function runKeySystem(opts)
 	opts = type(opts) == "table" and opts or {}
 	local title = opts.Title or "Milky Hub"
@@ -9884,7 +9931,7 @@ local function runKeySystem(opts)
 	return false
 end
 
--- ============ PUBLIC API (Milky Hub + Zenless/Fluent compat) ============
+-- api / return
 Milky = {
 	Name = "Milky Hub",
 	Version = LIBRARY_VERSION,
@@ -10467,7 +10514,7 @@ homeTab:AddParagraph("Milky Hub",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v0.0.5", "MILKY", "ScriptHub", "Pink" })
+homeTab:AddBadgeRow({ "v0.0.6", "MILKY", "ScriptHub", "Pink" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
