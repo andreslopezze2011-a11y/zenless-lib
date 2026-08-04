@@ -1,4 +1,4 @@
--- Milky Hub 0.0.4 - ScriptHub GUI Library (pink glass)
+-- Milky Hub 0.0.5 - ScriptHub GUI Library (pink glass)
 --[[
   Usage (library mode):
     getgenv().MILKY_DEFER_BOOT = true
@@ -65,26 +65,26 @@ getgenv().MilkyHubLoaded = false
 -- Structure:
 -- Theme / Config -> Utilities -> Animations -> Core primitives
 -- Icons -> Window shell -> Controls -> KeySystem / Boot -> Public API
-local LIBRARY_VERSION = "0.0.4"
+local LIBRARY_VERSION = "0.0.5"
 local CONFIG_VERSION = 6
 local CONFIG_FILE = "milky_config.json"
 local SNAP_PX = 20
 local BOOT_TIME = os.clock()
 
--- ============ THEME / CONFIG (Milky Hub - pink glass) ============
+-- ============ THEME / CONFIG (Milky Hub - soft pink glass) ============
 local Theme = {
-	Background   = Color3.fromRGB(14, 10, 14),
-	Sidebar      = Color3.fromRGB(20, 14, 18),
-	Layer        = Color3.fromRGB(24, 18, 22),
-	Element      = Color3.fromRGB(36, 28, 34),
-	ElementHover = Color3.fromRGB(52, 38, 48),
-	ElementPress = Color3.fromRGB(28, 20, 26),
-	Accent       = Color3.fromRGB(255, 141, 199), -- neon pink (#FF8DC7)
-	AccentHover  = Color3.fromRGB(255, 176, 218),
-	AccentSoft   = Color3.fromRGB(232, 128, 178),
-	Text         = Color3.fromRGB(252, 248, 250),
-	SubText      = Color3.fromRGB(196, 178, 188),
-	Stroke       = Color3.fromRGB(92, 68, 82),
+	Background   = Color3.fromRGB(16, 12, 16),
+	Sidebar      = Color3.fromRGB(22, 16, 20),
+	Layer        = Color3.fromRGB(26, 20, 24),
+	Element      = Color3.fromRGB(38, 30, 36),
+	ElementHover = Color3.fromRGB(50, 38, 46),
+	ElementPress = Color3.fromRGB(30, 22, 28),
+	Accent       = Color3.fromRGB(236, 148, 188), -- soft pink glass (not neon)
+	AccentHover  = Color3.fromRGB(248, 176, 208),
+	AccentSoft   = Color3.fromRGB(210, 130, 168),
+	Text         = Color3.fromRGB(250, 246, 248),
+	SubText      = Color3.fromRGB(186, 168, 178),
+	Stroke       = Color3.fromRGB(78, 58, 70),
 	Highlight    = Color3.fromRGB(255, 255, 255),
 	Success      = Color3.fromRGB(110, 200, 140),
 	Warning      = Color3.fromRGB(220, 180, 100),
@@ -1263,7 +1263,7 @@ end
 -- ============ WINDOW SHELL (root / chrome) ============
 print("[Milky Hub] loaded")
 
-local WIN_W, WIN_H, MINI_H = 580, 400, 48
+local WIN_W, WIN_H, MINI_H = 580, 400, 52
 local minimized = false -- early: resize pads / title layout / shell helpers share this
 local AVATAR_URL = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
 local DISPLAY_NAME = player.DisplayName
@@ -1979,13 +1979,13 @@ make("Frame", {
 -- Circular anime/avatar chip beside MILKY HUB title
 local accentDot = make("ImageLabel", {
 	Name = "HeaderAvatar",
-	Size = UDim2.fromOffset(26, 26),
-	Position = UDim2.fromOffset(12, 11),
+	Size = UDim2.fromOffset(24, 24),
+	Position = UDim2.fromOffset(12, 10),
 	BackgroundColor3 = Theme.Background,
 	Image = AVATAR_URL,
 	ZIndex = 3,
 	BorderSizePixel = 0,
-}, { corner(13), stroke(Theme.Accent, 1, 0.35) })
+}, { corner(12), stroke(Theme.Accent, 1, 0.42) })
 accentDot.Parent = titleBar
 pcall(function()
 	local st = accentDot:FindFirstChildOfClass("UIStroke")
@@ -1993,83 +1993,99 @@ pcall(function()
 end)
 
 local dotGlow = make("Frame", {
-	Size = UDim2.fromOffset(30, 30),
-	Position = UDim2.fromOffset(10, 9),
+	Size = UDim2.fromOffset(28, 28),
+	Position = UDim2.fromOffset(10, 8),
 	BackgroundColor3 = Theme.Accent,
-	BackgroundTransparency = 0.9,
+	BackgroundTransparency = 0.92,
 	ZIndex = 2,
 	BorderSizePixel = 0,
-}, { corner(15) })
+}, { corner(14) })
 dotGlow.Parent = titleBar
 registerAccent(dotGlow, "BackgroundColor3")
 
--- Title + version sit side-by-side (MILKY white / HUB pink). Never overlap version.
-local TITLE_LEFT = 44
-local TITLE_RIGHT_RESERVE = 210 -- fps / bell / win controls
-local VERSION_GAP = 6
+-- Header hierarchy (exclusive slots — never stack):
+--   Row 1: [avatar] MILKY HUB  [vX.Y.Z chip] ........ [fps][bell][controls]
+--   Row 2: game subtitle only (e.g. "Volleyball Legends") — never shares with version/theme
+-- Theme / size-preset names ("Default", "Normal", …) are NOT drawn in the header.
+-- TitleL is one table to stay under Luau's 200 local-register limit.
+local TitleL = { left = 44, reserve = 210, gap = 8, brandH = 26, subH = 16, padY = 8 }
 titleBar.ClipsDescendants = true
 
 local titleLabel = make("TextLabel", {
 	Name = "Title",
 	BackgroundTransparency = 1,
-	Size = UDim2.fromOffset(64, MINI_H),
-	Position = UDim2.fromOffset(TITLE_LEFT, 0),
+	Size = UDim2.fromOffset(54, TitleL.brandH),
+	Position = UDim2.fromOffset(TitleL.left, TitleL.padY),
 	Font = Enum.Font.GothamBold,
 	Text = "MILKY",
-	TextSize = 15,
+	TextSize = 14,
 	TextColor3 = Theme.Text,
 	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Center,
 	TextTruncate = Enum.TextTruncate.None,
 	ZIndex = 5,
 })
 titleLabel.Parent = titleBar
 
--- Pink "HUB" suffix beside MILKY
 local hubLabel = make("TextLabel", {
 	Name = "HubTitle",
 	BackgroundTransparency = 1,
-	Size = UDim2.fromOffset(42, MINI_H),
-	Position = UDim2.fromOffset(TITLE_LEFT, 0),
+	Size = UDim2.fromOffset(36, TitleL.brandH),
+	Position = UDim2.fromOffset(TitleL.left, TitleL.padY),
 	Font = Enum.Font.GothamBold,
 	Text = "HUB",
-	TextSize = 15,
+	TextSize = 14,
 	TextColor3 = Theme.Accent,
 	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Center,
 	ZIndex = 5,
 })
 hubLabel.Parent = titleBar
 registerAccent(hubLabel, "TextColor3")
 
--- Optional game / custom subtitle after brand (truncated before version)
+-- Game subtitle: OWN line under brand (never beside version)
 local gameTitleLabel = make("TextLabel", {
 	Name = "GameTitle",
 	BackgroundTransparency = 1,
-	Size = UDim2.fromOffset(0, MINI_H),
-	Position = UDim2.fromOffset(TITLE_LEFT, 0),
-	Font = Enum.Font.GothamMedium,
+	Size = UDim2.fromOffset(0, TitleL.subH),
+	Position = UDim2.fromOffset(TitleL.left, TitleL.padY + TitleL.brandH),
+	Font = Enum.Font.Gotham,
 	Text = "",
-	TextSize = 12,
+	TextSize = 11,
 	TextColor3 = Theme.SubText,
 	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Center,
 	TextTruncate = Enum.TextTruncate.AtEnd,
 	Visible = false,
 	ZIndex = 5,
 })
 gameTitleLabel.Parent = titleBar
 
+-- Version chip (exclusive slot after brand on row 1) — stored on State to avoid a chunk local
+State.versionChip = make("Frame", {
+	Name = "VersionChip",
+	Size = UDim2.fromOffset(44, 18),
+	Position = UDim2.fromOffset(TitleL.left, TitleL.padY + 4),
+	BackgroundColor3 = Theme.Element,
+	BackgroundTransparency = 0.25,
+	BorderSizePixel = 0,
+	ZIndex = 5,
+}, { corner(5), stroke(Theme.Stroke, 1, 0.55) })
+State.versionChip.Parent = titleBar
+
 local versionLabel = make("TextLabel", {
 	Name = "Version",
 	BackgroundTransparency = 1,
-	Size = UDim2.fromOffset(48, MINI_H),
-	Position = UDim2.fromOffset(TITLE_LEFT, 0),
-	Font = Enum.Font.Gotham,
+	Size = UDim2.new(1, 0, 1, 0),
+	Font = Enum.Font.GothamMedium,
 	Text = "v" .. LIBRARY_VERSION,
-	TextSize = 11,
+	TextSize = 10,
 	TextColor3 = Theme.SubText,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	ZIndex = 5,
+	TextXAlignment = Enum.TextXAlignment.Center,
+	TextYAlignment = Enum.TextYAlignment.Center,
+	ZIndex = 6,
 })
-versionLabel.Parent = titleBar
+versionLabel.Parent = State.versionChip
 
 local function measureLabelWidth(label, fallbackChars)
 	local ok, bounds = pcall(function()
@@ -2077,7 +2093,7 @@ local function measureLabelWidth(label, fallbackChars)
 			tostring(label.Text or ""),
 			label.TextSize,
 			label.Font,
-			Vector2.new(10000, MINI_H)
+			Vector2.new(10000, 64)
 		)
 	end)
 	if ok and bounds and typeof(bounds) == "Vector2" then
@@ -2092,7 +2108,7 @@ local function ellipsizeToWidth(text, font, textSize, maxW)
 		return ""
 	end
 	local ok, bounds = pcall(function()
-		return TextService:GetTextSize(text, textSize, font, Vector2.new(10000, MINI_H))
+		return TextService:GetTextSize(text, textSize, font, Vector2.new(10000, 64))
 	end)
 	if ok and bounds and bounds.X <= maxW then
 		return text
@@ -2104,7 +2120,7 @@ local function ellipsizeToWidth(text, font, textSize, maxW)
 		local mid = math.floor((lo + hi) / 2)
 		local candidate = string.sub(text, 1, mid) .. ell
 		local ok2, b2 = pcall(function()
-			return TextService:GetTextSize(candidate, textSize, font, Vector2.new(10000, MINI_H))
+			return TextService:GetTextSize(candidate, textSize, font, Vector2.new(10000, 64))
 		end)
 		if ok2 and b2 and b2.X <= maxW then
 			best = candidate
@@ -2117,71 +2133,104 @@ local function ellipsizeToWidth(text, font, textSize, maxW)
 end
 
 local function layoutTitleVersion()
+	local fullGame = tostring(gameTitleLabel:GetAttribute("FullText") or "")
+	local hasSub = fullGame ~= ""
+	local padY, brandH, subH = TitleL.padY, TitleL.brandH, TitleL.subH
+	local barH = hasSub and (padY + brandH + subH + 6) or 52
+	MINI_H = barH
+	titleBar.Size = UDim2.new(1, 0, 0, barH)
+	pcall(function()
+		local b = window:FindFirstChild("Body")
+		if b then
+			b.Size = UDim2.new(1, 0, 1, -barH)
+			b.Position = UDim2.fromOffset(0, barH)
+		end
+		local td = window:FindFirstChild("TitleDiv")
+		if td then
+			td.Position = UDim2.fromOffset(12, barH - 1)
+		end
+	end)
+	local brandMid = padY + brandH * 0.5
+	accentDot.Position = UDim2.fromOffset(12, math.floor(brandMid - 12))
+	dotGlow.Position = UDim2.fromOffset(10, math.floor(brandMid - 14))
+
 	local abs = titleBar.AbsoluteSize
 	local barW = (typeof(abs) == "Vector2" and abs.X) or 0
 	if barW < 1 then
 		barW = root.Size.X.Offset
 	end
 	if barW < 1 then return end
-	local reserve = TITLE_RIGHT_RESERVE
+
+	local reserve = TitleL.reserve
 	if IS_MOBILE or (minimized and barW < 420) then
 		reserve = math.min(reserve, math.max(118, barW * 0.42))
 	end
 	if minimized then
-		-- Hide fps/bell visually crowded chrome space already reserved smaller
 		reserve = math.min(reserve, 130)
 	end
-	local hubVisible = hubLabel.Visible
-	local gameVisible = gameTitleLabel.Visible and gameTitleLabel.Text ~= ""
-	local hubW = hubVisible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
-	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
-	local logoGap = 4
-	local gameGap = gameVisible and 8 or 0
-	local avail = barW - TITLE_LEFT - reserve - VERSION_GAP - verW - hubW - logoGap - gameGap
-	avail = math.max(24, avail)
 
-	-- Brand title (MILKY or custom) gets first priority
+	local hubVisible = hubLabel.Visible
+	local hubW = hubVisible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
+	local verTextW = math.max(measureLabelWidth(versionLabel, 7), 28)
+	local verW = verTextW + 12
+	local logoGap = 4
+	local brandY = padY
+	local left = TitleL.left
+	local vChip = State.versionChip
+
+	-- Brand (MILKY [HUB]) — exclusive left slot on row 1
 	local naturalTitle = measureLabelWidth(titleLabel, 9)
-	local titleBudget = gameVisible and math.min(naturalTitle, math.max(36, avail * 0.42)) or math.min(naturalTitle, avail)
-	local titleW = math.max(28, titleBudget)
-	titleLabel.Size = UDim2.fromOffset(titleW, MINI_H)
-	titleLabel.Position = UDim2.fromOffset(TITLE_LEFT, 0)
+	local brandBudget = barW - left - reserve - TitleL.gap - verW - (hubVisible and (logoGap + hubW) or 0) - 8
+	local titleW = math.max(28, math.min(naturalTitle, math.max(36, brandBudget)))
+	titleLabel.Size = UDim2.fromOffset(titleW, brandH)
+	titleLabel.Position = UDim2.fromOffset(left, brandY)
 	titleLabel.ZIndex = 5
 
-	local cursor = TITLE_LEFT + titleW + logoGap
+	local cursor = left + titleW + logoGap
 	if hubVisible then
-		hubLabel.Size = UDim2.fromOffset(hubW + 2, MINI_H)
-		hubLabel.Position = UDim2.fromOffset(cursor, 0)
+		hubLabel.Size = UDim2.fromOffset(hubW + 2, brandH)
+		hubLabel.Position = UDim2.fromOffset(cursor, brandY)
 		hubLabel.ZIndex = 5
 		cursor = cursor + hubW + 2
 	end
 
-	local gameBudget = math.max(0, (TITLE_LEFT + avail + hubW + logoGap) - cursor - gameGap)
-	if gameVisible and gameBudget > 18 then
-		local fullGame = gameTitleLabel:GetAttribute("FullText") or gameTitleLabel.Text
-		gameTitleLabel.Text = ellipsizeToWidth(fullGame, gameTitleLabel.Font, gameTitleLabel.TextSize, gameBudget)
-		local gw = math.min(measureLabelWidth(gameTitleLabel, 6), gameBudget)
-		gameTitleLabel.Size = UDim2.fromOffset(gw, MINI_H)
-		gameTitleLabel.Position = UDim2.fromOffset(cursor + gameGap, 0)
-		gameTitleLabel.Visible = true
-		cursor = cursor + gameGap + gw
-	elseif gameTitleLabel then
-		gameTitleLabel.Size = UDim2.fromOffset(0, MINI_H)
-		if not gameVisible then
-			gameTitleLabel.Visible = false
-		end
-	end
-
-	-- Version ALWAYS after content, never overlapping title/hub
-	local verX = math.max(cursor + VERSION_GAP, TITLE_LEFT + titleW + (hubVisible and (logoGap + hubW) or 0) + VERSION_GAP)
+	-- Version chip — exclusive after brand; never on subtitle row; never past chrome
+	local verX = cursor + TitleL.gap
 	local maxVerX = barW - reserve - verW - 4
 	if verX > maxVerX then
-		-- Shrink game/title further so version fits cleanly
-		verX = math.max(TITLE_LEFT + 40, maxVerX)
+		verX = math.max(left + titleW + 4, maxVerX)
 	end
-	versionLabel.Size = UDim2.fromOffset(verW + 2, MINI_H)
-	versionLabel.Position = UDim2.fromOffset(verX, 0)
-	versionLabel.ZIndex = 5
+	if vChip then
+		vChip.Size = UDim2.fromOffset(verW, 18)
+		vChip.Position = UDim2.fromOffset(verX, brandY + math.floor((brandH - 18) * 0.5))
+		vChip.ZIndex = 5
+		vChip.Visible = true
+	end
+
+	-- Premium badge (if any) sits AFTER version chip — never over title text
+	pcall(function()
+		local badge = State.premiumBadge
+		if badge and badge.Parent and badge.Visible then
+			badge.Position = UDim2.fromOffset(verX + verW + 6, brandY + math.floor((brandH - 16) * 0.5))
+			badge.AnchorPoint = Vector2.new(0, 0)
+			badge.ZIndex = 5
+		end
+	end)
+
+	-- Subtitle — exclusive row 2; never shares Y with brand/version/theme/chrome
+	if hasSub then
+		local subY = padY + brandH + 1
+		local subMax = math.max(40, barW - left - reserve - 8)
+		gameTitleLabel.Text = ellipsizeToWidth(fullGame, gameTitleLabel.Font, gameTitleLabel.TextSize, subMax)
+		gameTitleLabel.Size = UDim2.fromOffset(subMax, subH)
+		gameTitleLabel.Position = UDim2.fromOffset(left, subY)
+		gameTitleLabel.Visible = true
+		gameTitleLabel.ZIndex = 5
+	else
+		gameTitleLabel.Text = ""
+		gameTitleLabel.Size = UDim2.fromOffset(0, subH)
+		gameTitleLabel.Visible = false
+	end
 end
 
 titleLabel:GetPropertyChangedSignal("Text"):Connect(layoutTitleVersion)
@@ -2332,6 +2381,7 @@ make("Frame", {
 
 -- Divider under title with edge fade
 local titleDiv = make("Frame", {
+	Name = "TitleDiv",
 	Size = UDim2.new(1, -24, 0, 1),
 	Position = UDim2.fromOffset(12, MINI_H - 1),
 	BackgroundColor3 = Theme.Stroke,
@@ -2365,12 +2415,8 @@ local applyWindowOpacity
 local function computeMiniWidth()
 	local titleW = math.min(measureLabelWidth(titleLabel, 9), 100)
 	local hubW = hubLabel.Visible and math.max(measureLabelWidth(hubLabel, 8), 28) or 0
-	local verW = math.max(measureLabelWidth(versionLabel, 7), 28)
-	local gameW = 0
-	if gameTitleLabel and gameTitleLabel.Visible then
-		gameW = math.min(measureLabelWidth(gameTitleLabel, 6), 90)
-	end
-	local left = TITLE_LEFT + titleW + 4 + hubW + gameW + VERSION_GAP + verW + 16
+	local verW = math.max(measureLabelWidth(versionLabel, 7), 28) + 12
+	local left = TitleL.left + titleW + 4 + hubW + TitleL.gap + verW + 20
 	local right = IS_MOBILE and 90 or (72 + 10 + 26 + 14 + 70 + 14)
 	return math.clamp(math.floor(left + right), 280, math.max(WIN_W, 280))
 end
@@ -2464,7 +2510,7 @@ local dragHandle = make("TextButton", {
 	AutoButtonColor = false,
 	Active = true,
 	Selectable = false,
-	ZIndex = 50,
+	ZIndex = 8,
 })
 dragHandle.Parent = titleBar
 
@@ -2713,7 +2759,7 @@ local tabHolder = make("ScrollingFrame", {
 tabHolder.Parent = sidebar
 
 make("UIListLayout", {
-	Padding = UDim.new(0, 6),
+	Padding = UDim.new(0, 8),
 	FillDirection = Enum.FillDirection.Horizontal,
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -2723,8 +2769,8 @@ make("UIListLayout", {
 make("UIPadding", {
 	PaddingTop = UDim.new(0, 6),
 	PaddingBottom = UDim.new(0, 6),
-	PaddingLeft = UDim.new(0, 4),
-	PaddingRight = UDim.new(0, 4),
+	PaddingLeft = UDim.new(0, 6),
+	PaddingRight = UDim.new(0, 6),
 }).Parent = tabHolder
 
 -- Kept for API compatibility (sidebar collapse used to hide this)
@@ -2848,29 +2894,30 @@ local hintLabel = make("TextLabel", {
 hintLabel.Parent = userCard
 userCard.ClipsDescendants = true
 
--- Content panel under top nav (full width)
-local RIGHT_RAIL_W = IS_MOBILE and 0 or 148
+-- Content panel under top nav (full width by default — right rail auto-hides when narrow)
+local RIGHT_RAIL_W = 0
+State.rightRailWant = false -- user/API preference; width gate still applies
 local contentPanel = make("Frame", {
 	Name = "ContentPanel",
-	Size = UDim2.new(1, -(24 + RIGHT_RAIL_W), 1, -(NAV_H + 18)),
+	Size = UDim2.new(1, -16, 1, -(NAV_H + 20)),
 	Position = UDim2.fromOffset(8, NAV_H + 12),
 	BackgroundColor3 = Theme.Layer,
-	BackgroundTransparency = 0.12,
+	BackgroundTransparency = 0.18,
 	BorderSizePixel = 0,
-}, { corner(12), stroke(Theme.Stroke, 1, 0.5), cardLit() })
+}, { corner(12), stroke(Theme.Stroke, 1, 0.55), cardLit() })
 contentPanel.Parent = body
 topHighlight(contentPanel)
 
 local rightRail = make("Frame", {
 	Name = "RightRail",
-	Size = UDim2.new(0, math.max(RIGHT_RAIL_W, 1), 1, -(NAV_H + 18)),
-	Position = UDim2.new(1, -(math.max(RIGHT_RAIL_W, 1) + 8), 0, NAV_H + 12),
+	Size = UDim2.new(0, 1, 1, -(NAV_H + 20)),
+	Position = UDim2.new(1, -9, 0, NAV_H + 12),
 	BackgroundColor3 = Theme.Sidebar,
-	BackgroundTransparency = 0.12,
+	BackgroundTransparency = 0.18,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
-	Visible = not IS_MOBILE and RIGHT_RAIL_W > 0,
-}, { corner(12), stroke(Theme.Stroke, 1, 0.5), cardLit() })
+	Visible = false,
+}, { corner(12), stroke(Theme.Stroke, 1, 0.55), cardLit() })
 rightRail.Parent = body
 
 local rightArtGlow = make("Frame", {
@@ -2929,7 +2976,7 @@ make("TextLabel", {
 	Size = UDim2.new(1, -20, 0, 42),
 	Position = UDim2.fromOffset(10, 198),
 	Font = Enum.Font.Gotham,
-	Text = IS_MOBILE and "Tap MH button to hide" or "ScriptHub glass UI\nRightShift to hide",
+	Text = "v" .. LIBRARY_VERSION .. "\n" .. (IS_MOBILE and "Tap MH to hide" or "RightShift to hide"),
 	TextSize = 11,
 	TextColor3 = Theme.SubText,
 	TextWrapped = true,
@@ -2939,22 +2986,22 @@ make("TextLabel", {
 
 local contentArea = make("Frame", {
 	Name = "Content",
-	Size = UDim2.new(1, -8, 1, -28),
-	Position = UDim2.fromOffset(4, 4),
+	Size = UDim2.new(1, -12, 1, -36),
+	Position = UDim2.fromOffset(6, 8),
 	BackgroundTransparency = 1,
 	ClipsDescendants = true,
 })
 contentArea.Parent = contentPanel
 
--- Status bar: live clock + player name
+-- Status bar: live clock + player name (clear of scroll content)
 local contentFooter = make("Frame", {
-	Size = UDim2.new(1, -16, 0, 20),
-	Position = UDim2.new(0, 8, 1, -24),
+	Size = UDim2.new(1, -16, 0, 22),
+	Position = UDim2.new(0, 8, 1, -28),
 	BackgroundColor3 = Theme.Element,
-	BackgroundTransparency = 0.35,
+	BackgroundTransparency = 0.4,
 	BorderSizePixel = 0,
 	ZIndex = 3,
-}, { corner(5), stroke(Theme.Stroke, 1, 0.55) })
+}, { corner(6), stroke(Theme.Stroke, 1, 0.6) })
 contentFooter.Parent = contentPanel
 
 local statusDot = make("Frame", {
@@ -3615,15 +3662,15 @@ local function createTab(nameOrConfig)
 	registerAccent(scroll, "ScrollBarImageColor3")
 
 	make("UIListLayout", {
-		Padding = UDim.new(0, 7),
+		Padding = UDim.new(0, 9),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}).Parent = scroll
 
 	make("UIPadding", {
-		PaddingTop = UDim.new(0, 4),
-		PaddingBottom = UDim.new(0, 10),
-		PaddingLeft = UDim.new(0, 4),
-		PaddingRight = UDim.new(0, 8),
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 14),
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 10),
 	}).Parent = scroll
 
 	local tab = {
@@ -3722,15 +3769,23 @@ local function hoverCard(holder, cardStroke, cardScale)
 end
 
 local function createLabel(tab, text)
-	-- Section header - bordered group bar (mockup section boxes)
+	-- Section header with breathing room
 	local premium = State.premium == true
+	local wrap = make("Frame", {
+		Size = UDim2.new(1, 0, 0, premium and 38 or 36),
+		BackgroundTransparency = 1,
+		LayoutOrder = nextOrder(),
+	})
+	wrap.Parent = tab.Container
+
 	local row = make("Frame", {
 		Size = UDim2.new(1, 0, 0, premium and 30 or 28),
+		Position = UDim2.fromOffset(0, 6),
 		BackgroundColor3 = Theme.Element,
-		BackgroundTransparency = 0.35,
-		LayoutOrder = nextOrder(),
-	}, { corner(10), stroke(Theme.Stroke, 1, 0.45) })
-	row.Parent = tab.Container
+		BackgroundTransparency = 0.4,
+		BorderSizePixel = 0,
+	}, { corner(8), stroke(Theme.Stroke, 1, 0.5) })
+	row.Parent = wrap
 	row:SetAttribute("MilkySection", true)
 
 	local tick = make("Frame", {
@@ -3759,7 +3814,7 @@ local function createLabel(tab, text)
 		if lbl then registerAccent(lbl, "TextColor3") end
 	end
 
-	return row
+	return wrap
 end
 
 local function createDivider(tab)
@@ -4041,16 +4096,17 @@ local function createToggle(tab, text, default, callback, opts)
 	local state = default or false
 	if flag and ConfigData.values[flag] ~= nil then state = ConfigData.values[flag] and true or false end
 
-	local rowH = Flags.LargeHitboxes and 44 or 38
-	if desc and desc ~= "" then rowH = math.max(rowH, 52) end
+	local rowH = Flags.LargeHitboxes and 46 or 40
+	if desc and desc ~= "" then rowH = math.max(rowH, 54) end
 
 	local holder = make("TextButton", {
 		Size = UDim2.new(1, 0, 0, rowH),
 		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.08,
 		Text = "",
 		AutoButtonColor = false,
 		LayoutOrder = nextOrder(),
-	}, { corner(8) })
+	}, { corner(9) })
 	holder.Parent = tab.Container
 	holder:SetAttribute("MilkyTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
@@ -4059,8 +4115,8 @@ local function createToggle(tab, text, default, callback, opts)
 
 	local titleLbl = make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -68, desc and 0.55 or 1, 0),
-		Position = UDim2.fromOffset(14, desc and 4 or 0),
+		Size = UDim2.new(1, -72, desc and 0.55 or 1, 0),
+		Position = UDim2.fromOffset(14, desc and 5 or 0),
 		Font = State.uiFont,
 		Text = text,
 		TextSize = 13,
@@ -4072,7 +4128,7 @@ local function createToggle(tab, text, default, callback, opts)
 	if desc and desc ~= "" then
 		make("TextLabel", {
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -68, 0, 16),
+			Size = UDim2.new(1, -72, 0, 16),
 			Position = UDim2.new(0, 14, 1, -20),
 			Font = Enum.Font.Gotham,
 			Text = desc,
@@ -4085,26 +4141,26 @@ local function createToggle(tab, text, default, callback, opts)
 	end
 
 	local track = make("Frame", {
-		Size = UDim2.fromOffset(42, 22),
-		Position = UDim2.new(1, -54, 0.5, 0),
+		Size = UDim2.fromOffset(44, 24),
+		Position = UDim2.new(1, -56, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(48, 44, 50)),
-	}, { corner(11) })
+	}, { corner(12) })
 	track.Parent = holder
 	registerAccent(track, "BackgroundColor3")
 
 	local knob = make("Frame", {
-		Size = UDim2.fromOffset(16, 16),
-		Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+		Size = UDim2.fromOffset(18, 18),
+		Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
 		AnchorPoint = Vector2.new(0, 0.5),
 		BackgroundColor3 = Color3.new(1, 1, 1),
-	}, { corner(8) })
+	}, { corner(9) })
 	knob.Parent = track
 
 	local api
 	local function render()
 		tween(track, Anim.Fast, { BackgroundColor3 = state and Theme.Accent or (Theme.OffToggle or Color3.fromRGB(48, 44, 50)) })
-		tween(knob, Anim.Smooth, { Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0) })
+		tween(knob, Anim.Smooth, { Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0) })
 	end
 
 	api = {
@@ -4137,7 +4193,7 @@ local function createToggle(tab, text, default, callback, opts)
 			api.Set(not state)
 		end
 		if state then
-			sparkBurst(track, 21, 11, Theme.Accent, 6)
+			sparkBurst(track, 22, 12, Theme.Accent, 6)
 		end
 	end)
 	-- Touch-friendly: Activated fires for tap on mobile executors
@@ -4164,10 +4220,11 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 	end)
 
 	local holder = make("Frame", {
-		Size = UDim2.new(1, 0, 0, 56),
+		Size = UDim2.new(1, 0, 0, 60),
 		BackgroundColor3 = Theme.Element,
+		BackgroundTransparency = 0.08,
 		LayoutOrder = nextOrder(),
-	}, { corner(8) })
+	}, { corner(9) })
 	holder.Parent = tab.Container
 	holder:SetAttribute("MilkyTitle", text)
 	local cardStroke, cardScale = styleCard(holder)
@@ -4176,8 +4233,8 @@ local function createSlider(tab, text, min, max, default, callback, opts)
 
 	make("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -70, 0, 24),
-		Position = UDim2.fromOffset(14, 6),
+		Size = UDim2.new(1, -74, 0, 24),
+		Position = UDim2.fromOffset(14, 8),
 		Font = State.uiFont,
 		Text = text,
 		TextSize = 13,
@@ -5031,9 +5088,8 @@ local function ensurePremiumBadge()
 	if State.premiumBadge and State.premiumBadge.Parent then return State.premiumBadge end
 	local badge = make("Frame", {
 		Name = "PremiumBadge",
-		Size = UDim2.fromOffset(58, 16),
-		Position = UDim2.new(0, 148, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
+		Size = UDim2.fromOffset(52, 16),
+		Position = UDim2.fromOffset(200, 14),
 		BackgroundColor3 = PREMIUM_ACCENT,
 		BackgroundTransparency = 0.88,
 		Visible = false,
@@ -5065,6 +5121,7 @@ local function applyPremiumMode(on, opts)
 
 	local badge = ensurePremiumBadge()
 	badge.Visible = on
+	task.defer(layoutTitleVersion)
 
 	if on then
 		setAccent(opts.Accent or PREMIUM_ACCENT)
@@ -5473,10 +5530,10 @@ local function createThemePreset(tab)
 	createLabel(tab, "THEME PRESETS")
 
 	local presets = {
+		{ name = "Pink", color = Color3.fromRGB(236, 148, 188) },
+		{ name = "Rose", color = Color3.fromRGB(255, 130, 170) },
+		{ name = "Blush", color = Color3.fromRGB(248, 176, 208) },
 		{ name = "Silver", color = Color3.fromRGB(198, 198, 208) },
-		{ name = "Chrome", color = Color3.fromRGB(230, 230, 238) },
-		{ name = "Steel", color = Color3.fromRGB(140, 145, 155) },
-		{ name = "Graphite", color = Color3.fromRGB(100, 100, 108) },
 		{ name = "Pearl", color = Color3.fromRGB(210, 205, 195) },
 	}
 
@@ -6496,19 +6553,34 @@ end
 
 setRightRailVisible = function(on)
 	on = on and true or false
-	RIGHT_RAIL_W = on and 148 or 0
+	State.rightRailWant = on
+	local winW = root and root.Size.X.Offset or WIN_W
+	-- Auto-hide on narrow / mobile so content isn't cramped by an empty rail
+	local show = on and (not IS_MOBILE) and winW >= 700
+	RIGHT_RAIL_W = show and 120 or 0
 	pcall(function()
 		if rightRail then
-			rightRail.Visible = on
-			rightRail.Size = UDim2.new(0, math.max(RIGHT_RAIL_W, 1), 1, -(NAV_H + 18))
+			rightRail.Visible = show
+			rightRail.Size = UDim2.new(0, math.max(RIGHT_RAIL_W, 1), 1, -(NAV_H + 20))
 			rightRail.Position = UDim2.new(1, -(math.max(RIGHT_RAIL_W, 1) + 8), 0, NAV_H + 12)
 		end
 		if contentPanel then
-			contentPanel.Size = UDim2.new(1, -(24 + RIGHT_RAIL_W), 1, -(NAV_H + 18))
+			local inset = show and (24 + RIGHT_RAIL_W) or 16
+			contentPanel.Size = UDim2.new(1, -inset, 1, -(NAV_H + 20))
 		end
 	end)
-	return on
+	return show
 end
+
+-- Keep rail in sync when window is resized
+pcall(function()
+	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		if State.rightRailWant then
+			setRightRailVisible(true)
+		end
+		layoutTitleVersion()
+	end)
+end)
 
 setMobileMode = function(on)
 	if on == nil then on = true end
@@ -6521,16 +6593,17 @@ setMobileMode = function(on)
 			showMobileHideButton(true)
 			if fpsPill and root.Size.X.Offset < 460 then
 				fpsPill.Visible = false
-				TITLE_RIGHT_RESERVE = 120
+				TitleL.reserve = 120
 			end
 			hintLabel.Text = "MH button - hide"
 		else
-			setRightRailVisible(true)
+			-- Desktop: keep rail off by default (content-first); API can re-enable
+			setRightRailVisible(State.rightRailWant == true)
 			if not UserInputService.TouchEnabled then
 				destroyMobileHideButton()
 			end
 			if fpsPill then fpsPill.Visible = true end
-			TITLE_RIGHT_RESERVE = 210
+			TitleL.reserve = 210
 			hintLabel.Text = (toggleKey and toggleKey.Name or "RightShift") .. " - hide"
 		end
 		layoutTitleVersion()
@@ -9969,13 +10042,9 @@ Milky.Window = {
 				hubLabel.Visible = true
 				hubLabel.Text = "HUB"
 			end
-			if gameTitleLabel then
-				gameTitleLabel.Visible = false
-				gameTitleLabel.Text = ""
-				gameTitleLabel:SetAttribute("FullText", "")
-			end
+			-- keep existing subtitle if any
 		else
-			-- Keep brand (MILKY + pink HUB); put remainder as truncated game subtitle
+			-- Keep brand (MILKY + pink HUB); put remainder as subtitle on its own row
 			local gamePart = string.match(t, "^[Mm]ilky%s*[Hh]ub%s*[|%-%—:]%s*(.+)$")
 				or string.match(t, "^MILKY%s*HUB%s*[|%-%—:]%s*(.+)$")
 			if not gamePart and upper:find("MILKY", 1, true) then
@@ -9993,7 +10062,7 @@ Milky.Window = {
 					gameTitleLabel.Text = gamePart
 					gameTitleLabel.Visible = true
 				else
-					-- Fully custom title without brand prefix
+					-- Fully custom title without brand prefix — still brand-first if short
 					titleLabel.Text = t
 					if hubLabel then hubLabel.Visible = false end
 					gameTitleLabel.Visible = false
@@ -10001,6 +10070,15 @@ Milky.Window = {
 					gameTitleLabel:SetAttribute("FullText", "")
 				end
 			end
+		end
+		layoutTitleVersion()
+	end,
+	SetSubtitle = function(text)
+		local s = tostring(text or "")
+		if gameTitleLabel then
+			gameTitleLabel:SetAttribute("FullText", s)
+			gameTitleLabel.Text = s
+			gameTitleLabel.Visible = s ~= ""
 		end
 		layoutTitleVersion()
 	end,
@@ -10190,9 +10268,19 @@ function Milky:CreateWindow(config)
 				layoutTitleVersion()
 			end
 		end)
-	elseif config.Subtitle or config.SubTitle then
-		titleLabel.Text = config.Title or titleLabel.Text
-		layoutTitleVersion()
+	end
+	if config.Subtitle or config.SubTitle then
+		pcall(function()
+			local sub = config.Subtitle or config.SubTitle
+			if Milky.Window and type(Milky.Window.SetSubtitle) == "function" then
+				Milky.Window.SetSubtitle(sub)
+			elseif gameTitleLabel then
+				gameTitleLabel:SetAttribute("FullText", tostring(sub))
+				gameTitleLabel.Text = tostring(sub)
+				gameTitleLabel.Visible = tostring(sub) ~= ""
+				layoutTitleVersion()
+			end
+		end)
 	end
 	if config.MinimizeKey or config.ToggleKey then
 		Milky.Window.SetToggleKey(config.MinimizeKey or config.ToggleKey)
@@ -10202,6 +10290,9 @@ function Milky:CreateWindow(config)
 	end
 	if config.SizePreset then
 		pcall(function() setSizePreset(config.SizePreset) end)
+	end
+	if config.RightRail ~= nil then
+		pcall(function() setRightRailVisible(config.RightRail and true or false) end)
 	end
 	-- Ensure Window always exposes tab API (Fluent-style Window:AddTab)
 	local W = Milky.Window
@@ -10376,7 +10467,7 @@ homeTab:AddParagraph("Milky Hub",
 
 homeTab:AddSection("SESSION")
 local sessionStat = homeTab:AddStatCard({ Title = "Session uptime", Value = "0:00", Sub = "Live counter" })
-homeTab:AddBadgeRow({ "v0.0.1", "MILKY", "ScriptHub", "Pink" })
+homeTab:AddBadgeRow({ "v0.0.5", "MILKY", "ScriptHub", "Pink" })
 
 homeTab:AddButton({
 	Title = "Test notifications",
